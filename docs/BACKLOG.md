@@ -23,7 +23,7 @@ Status snapshot: **2026-09-29**.
 | 0 | Repo skeleton + CI | DONE | Engine CMake, frontend Vite, pytest suite, pre-commit |
 | 1 | Graph loading & city geometry | DONE | `pipeline/src/export.py`, C++ `Graph.h` |
 | 2 | Agent system & pathfinding | DONE | C++ `Agent.h`, `Pathfinder.h`, IDM car following |
-| 3 | Quadtree & collision avoidance | DONE | 2D spatial Quadtree (`Quadtree.h`) 20k stress-tested |
+| 3 | Spatial index & collision avoidance | DONE | Counting-sort uniform grid (`SpatialGrid.h`), 20k stress-tested; quadtree retained for benchmark comparison |
 | 4 | WebSocket stream & dashboard map | DONE | FlatBuffers stream + React Leaflet map view |
 | 5 | Fixed-cycle signal baseline | DONE | `SignalController.h` Webster fixed-cycle timing |
 | 6 | Real traffic demand (OD) + validation | DONE (acceptance pending) | Chicago Socrata OD matrix, MAPE 21.6% (GA tuned: 18.3%) |
@@ -59,7 +59,7 @@ Status snapshot: **2026-09-29**.
 
 ### Phase 7 & 8 — MARL & ONNX Deployment
 - **Status:** **DONE**
-- **Verified:** Exported `ml/policy.onnx` from converged `chicago/199.pt`. Validated ONNX/PyTorch parity on 10 test inputs (atol=1e-04). Benchmarked `bench_inference.exe` on `policy.onnx` with 64 batch size: p95 latency = 0.0808 ms (well under the 8.0 ms budget).
+- **Verified:** Exported `ml/policy.onnx` from converged `chicago/199.pt`. Validated ONNX/PyTorch parity on 10 test inputs (atol=1e-04). Benchmarked `bench_inference.exe` on `policy.onnx` with 64 batch size: p95 latency = 0.0808 ms (well under the 8.0 ms budget). **2026-10 re-measurement:** 0.040–0.133 ms p95 over five idle runs (see `docs/evidence/p8_onnx_provider.md`).
 
 ### Phase 9 — Multi-City Training & Validation
 - **Status:** **DONE**

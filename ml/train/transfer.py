@@ -40,6 +40,7 @@ from env.graph_loader import load_graph_json
 from train.ppo import compute_gae_batched, ppo_update
 from train.rollout import collect_episode, evaluate_fixed_baseline
 from train.train import build_models, latest_checkpoint
+from train.device import resolve_device, describe_device
 
 _CPU = os.environ.get("NEXUS_TORCH_THREADS", "1")
 torch.set_num_threads(int(_CPU))
@@ -113,7 +114,8 @@ def main() -> None:
     parser.add_argument("--decision-interval", type=float, default=5.0)
     parser.add_argument("--checkpoint-interval", type=int, default=50)
     parser.add_argument("--log-interval", type=int, default=10)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default="auto",
+                        help="'auto' (default) uses CUDA when available, else CPU")
     parser.add_argument("--experiment", default=None)
     parser.add_argument("--reward-scale", type=float, default=0.0)
     parser.add_argument(
@@ -125,7 +127,8 @@ def main() -> None:
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    device = torch.device(args.device)
+    device = resolve_device(args.device)
+    print("Transfer device:", describe_device(device))
 
     src_path = _resolve_source(args.source)
     print(f"Source checkpoint: {src_path}")

@@ -6,14 +6,25 @@ This document consolidates empirical benchmarks, real-world validation findings,
 
 ## 1. Engine Performance & Spatial Index Benchmarks
 
-### 1.1 Quadtree Spatial Index Benchmark
-The simulation engine utilizes a custom 2D Quadtree spatial index for fast $O(\log N)$ spatial neighbor queries during vehicle car-following and collision avoidance computations.
+> **Measured 2026-10** (Ryzen 5 3550H, MinGW GCC 16 Release build). Figures marked
+> *(catalog)* are design/spec values that were not re-measured in this audit.
+
+### 1.1 Spatial Index & Tick-Latency Benchmark
+The runtime spatial index is a counting-sort **uniform grid**
+(`engine/src/spatial/SpatialGrid.h`); the historical Quadtree and its naive-scan
+comparison remain available in `engine/bench/bench_quadtree.cpp` for reference.
 
 | Metric | Value | Baseline / Notes |
 | :--- | :--- | :--- |
-| **Max Stress-Tested Capacity** | 20,000 concurrent agents | 0 crashes, 0 memory leaks |
-| **Spatial Query Latency** | < 0.8 ms / tick (20k agents) | Unindexed linear scan: ~45 ms / tick |
-| **Pacing / Target FPS** | 60 FPS real-time broadcast | uWebSockets streaming @ 10 Hz metric update |
+| **Max Stress-Tested Capacity** | 20,000 concurrent agents | 0 crashes, 0 memory leaks *(measured 2026-10)* |
+| **Tick latency @ 20k (avg / p50 / p95)** | **8.64 ms / 8.14 ms / 12 ms** | ~113 ticks/s, 1-min `--fast` run *(measured)* |
+| — grid rebuild phase | 0.85 ms/tick | `engine --profile` breakdown *(measured)* |
+| — agent update + leader query phase | 5.74 ms/tick | capsule query on the grid *(measured)* |
+| — snapshot/serialize phase | 1.87 ms/tick | parallel `compute_world` *(measured)* |
+| **Tick latency @ 500 agents** | 0.472 ms avg / 0.695 ms p95 | *(measured, pre-existing baseline)* |
+| Historical quadtree vs naive scan | 21.6× @ 20k agents | `bench_quadtree` *(measured)* |
+
+See `docs/evidence/p2_performance.md` for the reproduction commands.
 
 ---
 
@@ -44,7 +55,12 @@ The genetic algorithm evolutionary search (`optimize_calibration.py`) evolved re
 
 ### 4.1 Value-Based, Policy-Based, and Continuous RL Comparison
 
-| Family | Algorithm | Model Architecture | Mean Reward | Avg Wait Time (s) | Training Time (50 eps) |
+> **Provenance:** *Mean Reward* values are `ml/algo` training-log outputs on the
+> toy environment. *Avg Wait Time* values are **catalog figures** — the toy env
+> exposes no real wait-time signal, so `evaluate()` now returns
+> `mean_wait: None` rather than a fabricated constant.
+
+| Family | Algorithm | Model Architecture | Mean Reward | Avg Wait Time (s) *(catalog)* | Training Time (50 eps) |
 | :--- | :--- | :--- | :---: | :---: | :---: |
 | **Value-Based** | Q-Learning | Tabular Discretization | -48,768.5 | 38.2 s | 1.21 s |
 | **Value-Based** | SARSA | Tabular On-Policy | -53,864.1 | 39.1 s | 1.18 s |
@@ -65,6 +81,13 @@ The genetic algorithm evolutionary search (`optimize_calibration.py`) evolved re
 
 ### 5.1 Policy Performance Comparison across Controller Types
 
+> **Provenance:** the wait/Gini figures below are **catalog values** carried
+> from the design spec — they were not re-measured in the 2026-10 audit. The
+> fuzzy and type-2 policies are genuinely wired into the signal timing since
+> P4 (per-intersection green extension driven by queue/wait demand), so these
+> numbers can now be reproduced by running the engine with
+> `--signal-mode fuzzy` / `--signal-mode type2_fuzzy`.
+
 | Policy Type | Strategy Description | Avg Wait Time (s) | Gini Index (Equity) | Computational Overhead / Node |
 | :--- | :--- | :---: | :---: | :---: |
 | **Webster (Fixed-Cycle)** | Fixed Webster green allocations based on historical volumes | 42.5 s | 0.48 | < 0.01 ms |
@@ -73,14 +96,14 @@ The genetic algorithm evolutionary search (`optimize_calibration.py`) evolved re
 
 ---
 
-## 6. Complete 36-Algorithm Multi-Subject Portfolio (Phases 26–36)
+## 6. Complete 48-Algorithm Multi-Subject Portfolio (Phases 26–36)
 
-The table below summarizes the comprehensive 36-algorithm inventory fully implemented across Computer Vision, Soft Computing, Natural Language Processing, and Reinforcement Learning:
+The table below summarizes the comprehensive 48-algorithm inventory (12 per subject) fully implemented across Computer Vision, Soft Computing, Natural Language Processing, and Reinforcement Learning. The source file keeps its historical `36_algo_matrix.json` name; the metrics column values are catalog design targets unless labelled **measured**.
 
 | Subsystem | Count | Key Headline Algorithms | Primary Achievement / Metric |
 | :--- | :---: | :--- | :--- |
 | **Computer Vision (CV)** | 12 | DeepSORT, U-Net, Mask R-CNN, Lucas-Kanade, Anomaly Detector, Crowd Density | 97.5% Blob count accuracy, 100% U-Net road IoU, real-time optical flow |
 | **Soft Computing (SC)** | 12 | GA, PSO, SA, CMA-ES, Ant Colony (ACS), Bee Colony (ABC), ANFIS, Type-2 Fuzzy, GP, NSGA-II | CMA-ES (16.2% MAPE), NSGA-II Pareto trade-off, ACS adaptive routing |
 | **NLP** | 12 | Intent Classifier, Sentiment Analyzer, Naive Bayes, NER, Coreference, TextRank, Knowledge Graph | 96.4% Intent accuracy, multi-entity span extraction, RDF semantic graph |
-| **Reinforcement Learning** | 12 | MAPPO, DQN, DDQN, Dueling DQN, REINFORCE, A2C, PPO, SAC, TD3, DDPG | MAPPO (+26.3% reward gain on 3,709 Chicago nodes), p95 latency 0.08 ms |
-| **TOTAL** | **48** | **36 Specialized + 12 RL Baseline & Advanced Models** | **End-to-End Interoperability via Event Bus & Algo Explorer** |
+| **Reinforcement Learning** | 12 | MAPPO, DQN, DDQN, Dueling DQN, REINFORCE, A2C, PPO, SAC, TD3, DDPG | MAPPO (+26.3% reward gain on 3,709 Chicago nodes, training log), p95 inference latency 0.04-0.13 ms *(measured range)* |
+| **TOTAL** | **48** | **48 algorithms across 4 subjects** | **End-to-End Interoperability via Event Bus & Algo Explorer** |

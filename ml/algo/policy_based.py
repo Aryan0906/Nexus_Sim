@@ -110,7 +110,7 @@ class REINFORCETrainer(BaseTrainer):
                 obs, reward, done, _, _ = self.env.step(action)
                 ep_rew += reward
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": 35.8}
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
 
 
 # -------------------------------------------------------------
@@ -172,7 +172,7 @@ class A2CTrainer(BaseTrainer):
                 obs, reward, done, _, _ = self.env.step(action)
                 ep_rew += reward
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": 31.2}
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
 
 
 # -------------------------------------------------------------
@@ -254,7 +254,7 @@ class SingleAgentPPOTrainer(BaseTrainer):
                 obs, reward, done, _, _ = self.env.step(action)
                 ep_rew += reward
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": 28.4}
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
 
 
 def main():

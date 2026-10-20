@@ -1,0 +1,4 @@
+$kind: websocket-request
+name: 'D18 - WS ws://localhost:9005/ws'
+order: 4000
+url: 'ws://localhost:9005/ws'

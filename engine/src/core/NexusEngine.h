@@ -50,7 +50,11 @@ public:
             load_policy(config_.policy_path);
         }
 
-        std::cout << "Signal mode: " << (policy_ ? "rl" : "webster") << "\n";
+        {
+            std::string startup_mode = config_.signal_mode;
+            if (startup_mode == "auto") startup_mode = policy_ ? "rl" : "webster";
+            std::cout << "Signal mode: " << startup_mode << "\n";
+        }
 
         if (!config_.no_ws) {
             start_websocket_server();
@@ -169,9 +173,11 @@ private:
         if (policy_path.empty()) return;
         std::string resolved = resolve_file(policy_path);
         auto pol = std::make_unique<ai::InferenceEngine>();
+        pol->set_provider(config_.onnx_provider);
         if (pol->load(resolved)) {
             std::cout << "AI policy loaded: " << resolved << " (obs_dim="
-                      << pol->obs_dim() << ", actions=" << pol->num_actions() << ")\n";
+                      << pol->obs_dim() << ", actions=" << pol->num_actions()
+                      << ", provider=" << pol->active_provider() << ")\n";
             policy_ = std::move(pol);
         } else {
             std::cerr << "WARNING: failed to load policy '" << policy_path
@@ -232,7 +238,8 @@ private:
                 if (!j.contains("policy")) return;
                 std::string pol = j["policy"].get<std::string>();
                 if (pol == "ai") pol = "rl";
-                if (pol != "webster" && pol != "rl" && pol != "fuzzy") {
+                if (pol != "webster" && pol != "rl" && pol != "fuzzy"
+                    && pol != "type2_fuzzy") {
                     if (ws_server_) {
                         ws_server_->broadcast_control(
                             "{\"type\":\"policy_switched\",\"ok\":false,\"error\":\"unknown policy '" + pol + "'\"}");
@@ -312,7 +319,9 @@ private:
     }
 
     void start_websocket_server() {
-        ws_server_ = std::make_unique<network::WebSocketServer>(config_.port);
+        ws_server_ = std::make_unique<network::WebSocketServer>(config_.port,
+                                                               config_.ssl_cert,
+                                                               config_.ssl_key);
         ws_server_->set_message_handler([this](const std::string& msg) {
             handle_ws_message(msg);
         });
@@ -396,8 +405,13 @@ private:
         sim.set_speed_factor(config_.speed_factor);
         sim.set_route_spread(config_.route_spread);
         sim.set_city_name(city);
+        sim.set_profile(config_.profile);
         sim.set_policy(policy_.get());
-        sim.set_signal_mode(policy_ ? "rl" : "webster");
+        {
+            std::string mode = config_.signal_mode;
+            if (mode == "auto") mode = policy_ ? "rl" : "webster";
+            sim.set_signal_mode(mode);
+        }
 
         bool od_active = false;
         // Explicit OD matrix if requested via CLI option --od
@@ -459,6 +473,7 @@ private:
                       << " max: " << sim.max_tick_ms() << "ms\n";
             std::cout << "Emissions: CO2=" << sim.total_co2_kg() << "kg NOx=" << sim.total_nox_g()
                       << "g | Transit Equity Index=" << sim.transit_equity_index() << "\n";
+            sim.log_phase_profile();
             std::cout << "Saved " << config_.journey_csv << "\n";
             return;
         }

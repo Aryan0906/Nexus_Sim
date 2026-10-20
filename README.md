@@ -4,7 +4,7 @@
 
 <!-- Animated Typing SVG Header -->
 <a href="https://github.com/DarkHeaVen1711/Nexus_Sim">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=22C55E&center=true&vCenter=true&width=750&lines=Real-Time+Multi-Agent+Urban+Traffic+Simulation;48+Intelligent+Algorithms+across+RL%2C+CV%2C+NLP+%26+Soft+Computing;Decentralized+MAPPO+Control+%E2%80%A2+20%2C000+Agents+%E2%80%A2+60+FPS;Equity+%26+Gini+Wait-Time+Inequality+Analysis;High-Performance+C%2B%2B17+Engine+%2B+React+19+Dashboard" alt="Typing SVG" />
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&pause=1000&color=22C55E&center=true&vCenter=true&width=750&lines=Real-Time+Multi-Agent+Urban+Traffic+Simulation;48+Intelligent+Algorithms+across+RL%2C+CV%2C+NLP+%26+Soft+Computing;Decentralized+MAPPO+Control+%E2%80%A2+20%2C000+Agents+%E2%80%A2+8.6+ms%2Ftick+measured;Equity+%26+Gini+Wait-Time+Inequality+Analysis;High-Performance+C%2B%2B17+Engine+%2B+React+19+Dashboard" alt="Typing SVG" />
 </a>
 
 <br/>
@@ -13,16 +13,16 @@
 [![Engine Build](https://img.shields.io/badge/C%2B%2B17_Engine-Passing-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](engine/)
 [![Dashboard UI](https://img.shields.io/badge/React_19-Vite_8-61DAFB?style=for-the-badge&logo=react&logoColor=black)](dashboard/)
 [![AI & ML](https://img.shields.io/badge/PyTorch_2.4-CUDA_12.4-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](ml/)
-[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-0.08ms_p95-005CED?style=for-the-badge&logo=onnx&logoColor=white)](engine/src/ai/)
+[![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-0.04--0.13ms_p95_measured-005CED?style=for-the-badge&logo=onnx&logoColor=white)](engine/src/ai/)
 [![Docker Ready](https://img.shields.io/badge/Docker-Compose_Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](docker-compose.yml)
-[![Tests Passing](https://img.shields.io/badge/Tests-117%2F117_Passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
+[![Tests Passing](https://img.shields.io/badge/Tests-183%2F183_Passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
 
 <br/>
 
 ```text
   🚦 [RED] ─────────────── 🟡 [YELLOW] ─────────────── 🟢 [GREEN]
   🚗 ═══════ 🚙 ═══════ 🚕 ═══════ 🚌 ═══════ 🏎️ ═══════ 🚚
-  [Chicago: 3,709 Signals] ── [Quadtree: 20k Agents] ── [MAPPO: +26.3% Gain]
+  [Chicago: 3,709 Signals] ── [Grid index: 20k Agents] ── [MAPPO: +26.3% Gain*]
 ```
 
 <p align="center">
@@ -50,9 +50,9 @@
 
 ## ⚡ Key Highlights & Capabilities
 
-- 🏎️ **Ultra-Fast C++17 Core**: Custom Structure-of-Arrays (SoA) layout with 2D Quadtree spatial indexing ($O(\log N)$ proximity queries), stress-tested at **20,000 concurrent agents** maintaining real-time 60 FPS pacing.
-- 🧠 **Decentralized MAPPO AI Control**: Independent neural actors controlling 3,709 intersections simultaneously. Converged full-network model delivers **+26.3% reward improvement** over fixed-cycle Webster timing.
-- ⏱️ **Zero-Overhead Inference**: Direct hot-path ONNX C++ inference dispatch running off a single-producer single-consumer (SPSC) ring buffer (**p95 latency = 0.0808 ms**, 100× inside the 8.0 ms budget).
+- 🏎️ **Ultra-Fast C++17 Core**: Custom Structure-of-Arrays (SoA) layout with a counting-sort uniform grid spatial index (O(1) cell lookup), stress-tested at **20,000 concurrent agents** with a measured **8.6 ms average tick (p95 12 ms, ~113 ticks/s)** on a Ryzen 5 3550H — see `docs/evidence/p2_performance.md`.
+- 🧠 **Decentralized MAPPO AI Control**: Independent neural actors controlling 3,709 intersections simultaneously. Training logs report **+26.3% reward improvement** over fixed-cycle Webster timing on Chicago (training-log claim; see [Multi-City Benchmarks](#multi-city-benchmarks)).
+- ⏱️ **Near-Zero-Overhead Inference**: Direct hot-path ONNX C++ inference dispatch running off a single-producer single-consumer (SPSC) ring buffer (**p95 latency = 0.04–0.13 ms** measured by `engine/build/bench_inference` across five idle runs, ~60–200× inside the 8.0 ms budget). GPU-first by default: training uses `--device auto` and the engine uses `--onnx-provider auto`, each falling back to CPU when no GPU is available.
 - ⚖️ **Algorithmic Equity Analysis**: Computes real-time Gini coefficients and per-zone wait-time distributions, preventing AI policies from starving peripheral neighborhoods to optimize central throughput.
 - 🌐 **Unified 4-Subject Cross-Subsystem Event Bus**: Real-time pub/sub broker (port `9005`) connecting Computer Vision anomaly alerts $\to$ NLP incident parsing $\to$ Soft Computing parameter adaptation $\to$ Engine mutation.
 - 📊 **Algo Explorer & Master Matrix**: Comprehensive catalog service (port `9006`) and interactive dashboard UI exposing empirical metrics for all **48 specialized algorithms**.
@@ -74,7 +74,7 @@ NexusSim is built on an isolated sidecar architecture. The C++ engine remains co
                           ┌────────────┴─────────────┐                 │
                           │   C++17 Engine Core      │                 │
                           │  • IDM Car Following     │                 │
-                          │  • 2D Spatial Quadtree   │                 │
+                          │  • Uniform Grid Index    │                 │
                           │  • ONNX Hot-Path (p95<1ms│                 │
                           │  • Mamdani/Type-2 Fuzzy  │                 │
                           └────────────▲─────────────┘                 │
@@ -99,7 +99,7 @@ NexusSim is built on an isolated sidecar architecture. The C++ engine remains co
 | **Virtual Camera Service** | `9003` | HTTP / WS | Streams annotated canvas frames and vehicle blob counts |
 | **NLP Chat & Incident API** | `9004` | REST | Endpoints `POST /chat` and `POST /incident` with fuzzy street gazetteer |
 | **Cross-Subject Event Bus** | `9005` | WS / Async | Pub/Sub topic router (`cv.anomaly`, `nlp.incident`, `sc.adaptation`) |
-| **Algo Explorer Service** | `9006` | REST | Delivers master algorithmic matrix (`36_algo_matrix.json`) |
+| **Algo Explorer Service** | `9006` | REST | Delivers master algorithmic matrix (`36_algo_matrix.json` — legacy file name, contains all **48** algorithms) |
 
 ---
 
@@ -116,7 +116,9 @@ NexusSim features 48 algorithms across all four computing disciplines:
 <details open>
 <summary><b>Click to expand full algorithm matrix</b></summary>
 
-| Discipline | ID | Algorithm Name | Module Path | Empirical Benchmark | Status |
+> ⚠️ **Metric provenance**: the numbers in the *Reported Benchmark* column are catalog / training-log values carried from the design spec and are **not independently re-measured** in the 2026-10 audit, except rows explicitly marked **measured**. Verified engine measurements live in `docs/evidence/`.
+
+| Discipline | ID | Algorithm Name | Module Path | Reported Benchmark | Status |
 |:---|:---|:---|:---|:---|:---:|
 | **Computer Vision** | `CV-1` | Classical HSV Thresholding | `pipeline/src/cv_congestion.py` | 91.4% accuracy / 1.2 ms | `ACTIVE` |
 | | `CV-2` | CNN Traffic Tile Classifier | `pipeline/src/cv_congestion.py` | 94.8% accuracy / 3.8 ms | `ACTIVE` |
@@ -154,10 +156,10 @@ NexusSim features 48 algorithms across all four computing disciplines:
 | | `NLP-10`| RDF Knowledge Graph | `ml/nlp/knowledge_graph.py` | 100% semantic triple recall | `ACTIVE` |
 | | `NLP-11`| Traffic Event Extractor | `ml/nlp/event_extractor.py` | 94.6% structured extraction | `ACTIVE` |
 | | `NLP-12`| Interactive Command Console | `dashboard/src/components/NLPCommandConsole.tsx` | Real-time WS execution | `ACTIVE` |
-| **RL** | `RL-1` | Decentralized MAPPO | `ml/train/train.py` | **+26.3% reward** on Chicago | `DEPLOYED_C++` |
+| **RL** | `RL-1` | Decentralized MAPPO | `ml/train/train.py` | **+26.3% reward** on Chicago (training log) | `ACTIVE` |
 | | `RL-2` | Tabular Q-Learning | `ml/algo/value_based.py` | -48,768.5 reward / 38.2 s | `BENCHMARKED` |
 | | `RL-3` | Tabular SARSA | `ml/algo/value_based.py` | -53,864.1 reward / 39.1 s | `BENCHMARKED` |
-| | `RL-4` | Deep Q-Network (DQN) | `ml/algo/value_based.py` | -59,126.1 reward / 33.4 s | `DEPLOYED_C++` |
+| | `RL-4` | Deep Q-Network (DQN) | `ml/algo/value_based.py` | -59,126.1 reward / 33.4 s | `BENCHMARKED` |
 | | `RL-5` | Double DQN (DDQN) | `ml/algo/value_based.py` | -48,768.5 reward / 31.8 s | `BENCHMARKED` |
 | | `RL-6` | Dueling DQN | `ml/algo/value_based.py` | -56,956.4 reward / 30.5 s | `BENCHMARKED` |
 | | `RL-7` | REINFORCE Policy Gradient | `ml/algo/policy_based.py` | -47,700.1 reward / 35.8 s | `BENCHMARKED` |
@@ -174,6 +176,8 @@ NexusSim features 48 algorithms across all four computing disciplines:
 ## 📈 Multi-City Benchmarks
 
 Empirical performance evaluation comparing the learned multi-agent policy (MAPPO) against traditional Webster fixed-cycle control across configured cities:
+
+> **Provenance**: these are `ml/train/evaluate.py` training-log results, not independently re-run in the 2026-10 audit. The headline **+26.3% Chicago gain** is a training-log claim.
 
 | City | Intersections | Nodes / Edges | Webster Reward | MARL Reward | Net Improvement | OD Data Source |
 |---|:---:|:---:|:---:|:---:|:---:|---|
@@ -261,13 +265,39 @@ python -m pytest ml/tests/ -v
 cd engine/build && ctest --output-on-failure
 ```
 
+### 5. API Verification (Postman + `api_check.py`)
+
+NexusSim includes a Postman collection (`postman/NexusSim_API_Collection.json`) and a standalone Python verifier (`postman/api_check.py`) that exercise every HTTP endpoint plus the engine WebSocket across all sidecars:
+
+```bash
+# Postman: run the "NexusSim API Tests" collection in the Collection Runner
+# (targets http://localhost:8000|:9003|:9004|:9005|:9006|:3000)
+
+# Standalone Python verifier (covers HTTP + the 4 WS cases Postman skips):
+python postman/api_check.py
+```
+
+```text
+================================== API VERIFICATION ==================================
+  ✔ Gateway (:8000)              :  8 / 8  passing  (incl. WS /ws and /ws/events)
+  ✔ Sidecars direct (:9003-:9006): 12 / 12  passing
+  ✔ Dashboard (:3000)            :  2 / 2   passing
+  ✔ Engine direct WS (:9001)     :  1 / 1   passing
+  ------------------------------------------------------------------------------------
+  TOTAL                          : 24 / 24 PASSING (100% GREEN, 0 failures)
+=======================================================================================
+```
+
+See `docs/TEST_LOG.md` for the full run history (Run 1: 21/24 → Run 2: 24/24 post-fix → Run 3 live: 24/24) and `docs/README.md` for the API verification index.
+
 ```text
 ======================= TEST EXECUTION SUMMARY =======================
-  ✔ Dashboard Vitest Suite       :  8 / 8   passing (0.65s)
-  ✔ Data Pipeline Pytest Suite   : 30 / 30  passing (1.37s)
-  ✔ ML & Cross-Subject E2E Suite : 79 / 79  passing (16.42s)
+  ✔ C++ Engine Suite (CTest)     :  56 / 56  passing
+  ✔ ML & Cross-Subject E2E Suite :  84 / 84  passing
+  ✔ Data Pipeline Pytest Suite   :  35 / 35  passing
+  ✔ Dashboard Vitest Suite       :   8 / 8   passing
   --------------------------------------------------------------------
-  TOTAL                          : 117 / 117 PASSING (100% GREEN)
+  TOTAL                          : 183 / 183 PASSING (100% GREEN)
 ======================================================================
 ```
 

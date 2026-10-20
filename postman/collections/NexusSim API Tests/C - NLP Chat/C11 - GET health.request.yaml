@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'C11 - GET /health'
+order: 1000
+method: GET
+url: '{{nlp}}/health'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('C11 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('C11 - status is ok', () => { pm.expect(pm.response.json().status).to.eql('ok'); });
+      pm.test('C11 - service is nlp_chat', () => { pm.expect(pm.response.json().service).to.eql('nlp_chat'); });
+      pm.test('C11 - port is 9004', () => { pm.expect(pm.response.json().port).to.eql(9004); });

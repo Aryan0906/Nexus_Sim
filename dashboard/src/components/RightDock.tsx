@@ -4,6 +4,7 @@ import { CongestionCVOverlay } from './CongestionCVOverlay';
 import { VirtualCameraPanel } from './VirtualCameraPanel';
 import { ChatPanel } from './ChatPanel';
 import { IncidentReportPanel } from './IncidentReportPanel';
+import { AlgoExplorerPanel } from './AlgoExplorer/AlgoExplorerPanel';
 import type { IntersectionSignalState, SignalMode } from '../hooks/useWebSocket';
 
 interface ZoneMetric {
@@ -23,20 +24,22 @@ interface RightDockProps {
   signalMode?: SignalMode;
   connected?: boolean;
   simActive?: boolean;
-  onSwitch?: (policy: 'webster' | 'rl') => void;
+  onSwitch?: (policy: 'webster' | 'rl' | 'fuzzy' | 'type2_fuzzy') => void;
   signals?: IntersectionSignalState[];
-  onSwitchPolicy?: (policy: 'webster' | 'rl' | 'fuzzy', intersectionId?: number | null) => void;
+  onSwitchPolicy?: (policy: 'webster' | 'rl' | 'fuzzy' | 'type2_fuzzy', intersectionId?: number | null) => void;
+  simTick?: number | null;
   city: string | null;
   collapsed: boolean;
   onToggleCollapse: () => void;
 }
 
-type TabType = 'metrics' | 'vision' | 'chat' | 'all';
+type TabType = 'metrics' | 'vision' | 'chat' | 'algos' | 'all';
 
 const TABS: { id: TabType; label: string; icon: string }[] = [
   { id: 'metrics', label: 'Metrics', icon: '📊' },
   { id: 'vision', label: 'Vision', icon: '👁️' },
   { id: 'chat', label: 'Chat', icon: '💬' },
+  { id: 'algos', label: 'Algos', icon: '🧪' },
   { id: 'all', label: 'All', icon: '📑' },
 ];
 
@@ -49,6 +52,7 @@ export const RightDock: React.FC<RightDockProps> = ({
   onSwitch,
   signals = [],
   onSwitchPolicy,
+  simTick = null,
   city,
   collapsed,
   onToggleCollapse,
@@ -156,6 +160,25 @@ export const RightDock: React.FC<RightDockProps> = ({
           })}
         </div>
 
+        {simTick !== null && (
+          <span
+            title="Engine simulation tick"
+            style={{
+              marginLeft: '4px',
+              fontSize: '10px',
+              fontWeight: 700,
+              color: '#93c5fd',
+              backgroundColor: 'rgba(59, 130, 246, 0.15)',
+              border: '1px solid rgba(59, 130, 246, 0.35)',
+              borderRadius: '9999px',
+              padding: '2px 8px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            tick {simTick}
+          </span>
+        )}
+
         <button
           onClick={onToggleCollapse}
           title="Minimize Dock"
@@ -219,6 +242,8 @@ export const RightDock: React.FC<RightDockProps> = ({
           </>
         )}
 
+        {activeTab === 'algos' && <AlgoExplorerPanel />}
+
         {activeTab === 'all' && (
           <>
             <MetricsPanel
@@ -238,6 +263,8 @@ export const RightDock: React.FC<RightDockProps> = ({
             <div style={{ height: '1px', backgroundColor: 'rgba(55, 65, 81, 0.6)', margin: '4px 0' }} />
             <ChatPanel city={city || 'chicago'} visible={true} />
             <IncidentReportPanel city={city || 'chicago'} visible={true} />
+            <div style={{ height: '1px', backgroundColor: 'rgba(55, 65, 81, 0.6)', margin: '4px 0' }} />
+            <AlgoExplorerPanel />
           </>
         )}
       </div>

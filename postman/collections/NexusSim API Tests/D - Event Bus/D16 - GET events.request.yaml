@@ -1,0 +1,11 @@
+$kind: http-request
+name: 'D16 - GET /events'
+order: 2000
+method: GET
+url: '{{event_bus}}/events'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('D16 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('D16 - Returns an array', () => { pm.expect(pm.response.json()).to.be.an('array'); });

@@ -32,7 +32,7 @@ OPSET_VERSION = 17
 
 
 def load_policy(checkpoint_path: str, obs_dim: int, hidden: int,
-                device: str = "cpu") -> PolicyNetwork:
+                device: "str | torch.device" = "cpu") -> PolicyNetwork:
     """Rebuild the policy network and load trained weights from a checkpoint."""
     policy = PolicyNetwork(obs_dim, hidden=hidden).to(device)
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=True)
@@ -45,7 +45,7 @@ def load_policy(checkpoint_path: str, obs_dim: int, hidden: int,
 
 def export_checkpoint(checkpoint_path: str, output_path: str,
                       obs_dim: int, hidden: int,
-                      device: str = "cpu") -> str:
+                      device: "str | torch.device" = "cpu") -> str:
     """Trace the policy network to ONNX and write it to ``output_path``."""
     policy = load_policy(checkpoint_path, obs_dim, hidden, device)
     dummy = torch.zeros(1, obs_dim, device=device)
@@ -78,7 +78,8 @@ def parse_args() -> argparse.Namespace:
                         help="observation dimension used at training time")
     parser.add_argument("--hidden", type=int, default=64,
                         help="hidden layer width used at training time")
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default="auto",
+                        help="'auto' (default) uses CUDA when available, else CPU")
     parser.add_argument("--skip-validation", action="store_true",
                         help="skip the 10-input ONNX/PyTorch parity check")
     return parser.parse_args()
@@ -86,8 +87,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    device = resolve_device(args.device)
+    print("Export device:", device)
     path = export_checkpoint(args.checkpoint, args.output,
-                             args.obs_dim, args.hidden, args.device)
+                             args.obs_dim, args.hidden, device)
     size_kb = os.path.getsize(path) / 1024.0
     print("Exported %s (%.1f KB)" % (path, size_kb))
 

@@ -1,0 +1,19 @@
+$kind: collection
+name: NexusSim API Tests
+description: |-
+  Full-stack API test suite for NexusSim.
+  Covers Gateway (:8000), Virtual Camera (:9003), NLP Chat (:9004),
+  Event Bus (:9005), Algo Explorer (:9006), Dashboard (:3000), and Engine (:9001).
+variables:
+  - key: gateway
+    value: 'http://localhost:8000'
+  - key: camera
+    value: 'http://localhost:9003'
+  - key: nlp
+    value: 'http://localhost:9004'
+  - key: event_bus
+    value: 'http://localhost:9005'
+  - key: algo
+    value: 'http://localhost:9006'
+  - key: dashboard
+    value: 'http://localhost:3000'

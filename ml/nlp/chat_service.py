@@ -138,7 +138,17 @@ def feedback_endpoint(req: FeedbackRequest):
 
 def main():
     print("Starting NLP Chat & Incident Sidecar Service on port 9004...")
-    uvicorn.run(app, host="0.0.0.0", port=9004, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=9004, log_level="info", **_ssl_kwargs())
+
+
+def _ssl_kwargs():
+    cert = os.environ.get("SSL_CERT", "certs/server.crt")
+    key = os.environ.get("SSL_KEY", "certs/server.key")
+    if os.path.exists(cert) and os.path.exists(key):
+        print(f"TLS enabled: {cert}")
+        return {"ssl_certfile": cert, "ssl_keyfile": key}
+    print("WARNING: certs/server.{crt,key} not found; serving plain HTTP")
+    return {}
 
 
 if __name__ == "__main__":

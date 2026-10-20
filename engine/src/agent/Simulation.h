@@ -14,9 +14,13 @@
 #include "IDM.h"
 #include "Pathfinder.h"
 #include "SignalController.h"
+#include "SignalPolicy.h"
+#include "FuzzyPolicy.h"
+#include "Type2FuzzyPolicy.h"
 #include "../ai/InferenceEngine.h"
 #include "../graph/Graph.h"
 #include "../spatial/Quadtree.h"
+#include "../spatial/SpatialGrid.h"
 #include "../network/WebSocketServer.h"
 #include "../nlohmann/json.hpp"
 #include "agent_delta_generated.h"
@@ -41,6 +45,20 @@ public:
     void set_route_spread(double s) { route_spread_ = s; }
     void set_chaos(double c) { chaos_coefficient_ = c; }
     void set_city_name(const std::string& n) { city_name_ = n; }
+    void set_profile(bool p) { profile_ = p; }
+
+    void log_phase_profile() const {
+        if (!profile_ || profile_ticks_ == 0) return;
+        const double n = static_cast<double>(profile_ticks_);
+        std::cout << "[PROFILE] avg ms/tick: od=" << prof_od_ms_ / n
+                  << " signals=" << prof_sig_ms_ / n
+                  << " snapshot=" << prof_snap_ms_ / n
+                  << " grid=" << prof_qt_ms_ / n
+                  << " agents=" << prof_agents_ms_ / n
+                  << " emissions=" << prof_emit_ms_ / n
+                  << " metrics=" << prof_metrics_ms_ / n
+                  << " total=" << prof_total_ms_ / n << "\n";
+    }
 
     // Phase 8.5: attach a trained ONNX policy. When set and loaded, signal
     // phases are re-decided every kPolicyInterval seconds via one batched
@@ -48,13 +66,33 @@ public:
     void set_policy(ai::InferenceEngine* policy) { policy_ = policy; }
 
     // Phase 8.7: control-mode label broadcast with every state frame so the
-    // dashboard can badge the run as AI or baseline (Webster).
-    void set_signal_mode(const std::string& m) { signal_mode_ = m; }
+    // dashboard can badge the run as AI or baseline (Webster). "fuzzy" and
+    // "type2_fuzzy" additionally install per-intersection adaptive policies
+    // that consume queue/wait demand each simulated second.
+    void set_signal_mode(const std::string& m) {
+        signal_mode_ = m;
+        signal_policies_.clear();
+        signal_inputs_.clear();
+        last_signal_input_refresh_ = -1e9;
+        for (auto& [id, sc] : signals_) {
+            if (!sc) continue;
+            sc->set_mode(m);
+            if (m == "fuzzy")
+                signal_policies_[id] = std::make_unique<FuzzyPolicy>(sc.get());
+            else if (m == "type2_fuzzy")
+                signal_policies_[id] = std::make_unique<Type2FuzzyPolicy>(sc.get());
+        }
+    }
 
     bool set_intersection_policy(int64_t node_id, const std::string& m) {
         auto it = signals_.find(node_id);
-        if (it == signals_.end()) return false;
-        if (it->second) it->second->set_mode(m);
+        if (it == signals_.end() || !it->second) return false;
+        it->second->set_mode(m);
+        signal_policies_.erase(node_id);
+        if (m == "fuzzy")
+            signal_policies_[node_id] = std::make_unique<FuzzyPolicy>(it->second.get());
+        else if (m == "type2_fuzzy")
+            signal_policies_[node_id] = std::make_unique<Type2FuzzyPolicy>(it->second.get());
         return true;
     }
 
@@ -116,6 +154,9 @@ public:
             agents_.path[idx] = std::move(p);
             if (agents_.path[idx].size() < 2)
                 agents_.state[idx] = AgentState::Arrived;
+            else
+                agents_.cur_edge_len[idx] = lookup_edge_len(
+                    agents_.path[idx][0], agents_.path[idx][1]);
             agents_.target_speed[idx] =
                 get_default_idm_params(t, chaos_coefficient_).v0
                 * speed_factor_;
@@ -172,6 +213,9 @@ public:
             agents_.path[i] = std::move(p);
             if (agents_.path[i].size() < 2)
                 agents_.state[i] = AgentState::Arrived;
+            else
+                agents_.cur_edge_len[i] = lookup_edge_len(
+                    agents_.path[i][0], agents_.path[i][1]);
             agents_.target_speed[i] =
                 get_default_idm_params(t, chaos_coefficient_).v0
                 * speed_factor_;
@@ -240,13 +284,21 @@ public:
 
     void tick(double dt) {
         auto t0 = std::chrono::high_resolution_clock::now();
+        auto mark = [&]() { return std::chrono::high_resolution_clock::now(); };
+        auto elapsed_ms = [](auto a, auto b) {
+            return std::chrono::duration<double, std::milli>(b - a).count();
+        };
+        auto phase_start = t0;
+
         sim_time_ += dt;
         update_od_spawns(dt);
+        if (profile_) { auto tp = mark(); prof_od_ms_ += elapsed_ms(phase_start, tp); phase_start = tp; }
         const size_t N = agents_.size();
 
-        // Tick signal controllers
-        for (auto& [id, sc] : signals_) sc->tick(dt);
+        // Tick signal controllers (adaptive policies when installed)
+        tick_signals(dt);
         maybe_apply_policy();
+        if (profile_) { auto tp = mark(); prof_sig_ms_ += elapsed_ms(phase_start, tp); phase_start = tp; }
 
         // Snapshot phase (sequential) — safe reads for parallel updates
         if (snap_x_.size() < N) {
@@ -263,22 +315,27 @@ public:
         active_.clear();
         active_.reserve(N);
         for (size_t i = 0; i < N; ++i) {
-            auto s = agents_.state[i];
-            if (s == AgentState::Spawned || s == AgentState::Navigating) {
-                compute_world(i);
-                snap_v_[i] = agents_.velocity[i];
+            const auto s = agents_.state[i];
+            snap_state_[i] = s;
+            if (s == AgentState::Spawned || s == AgentState::Navigating)
                 active_.push_back(i);
-            }
-            snap_state_[i] = agents_.state[i];
         }
+        thread_pool_.parallel_for(0, active_.size(), [this](size_t k) {
+            const size_t i = active_[k];
+            compute_world(i);
+            snap_v_[i] = agents_.velocity[i];
+        });
+        if (profile_) { auto tp = mark(); prof_snap_ms_ += elapsed_ms(phase_start, tp); phase_start = tp; }
 
         // Rebuild quadtree
         rebuild_quadtree(active_);
+        if (profile_) { auto tp = mark(); prof_qt_ms_ += elapsed_ms(phase_start, tp); phase_start = tp; }
 
         // Parallel agent updates via persistent ThreadPool
         thread_pool_.parallel_for(0, active_.size(), [this, dt](size_t k) {
             update_agent(active_[k], dt);
         });
+        if (profile_) { auto tp = mark(); prof_agents_ms_ += elapsed_ms(phase_start, tp); phase_start = tp; }
 
         // Accumulate emissions
         for (size_t i : active_) {
@@ -290,16 +347,24 @@ public:
                 total_nox_mg_ += co2_rate * 1.8 * dt;
             }
         }
+        if (profile_) { auto tp = mark(); prof_emit_ms_ += elapsed_ms(phase_start, tp); phase_start = tp; }
 
         // FPS & Latency tracking
         auto t1 = std::chrono::high_resolution_clock::now();
         uint64_t us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
         tick_histogram_.record_us(us);
         tick_count_++;
+        if (profile_) {
+            prof_total_ms_ += elapsed_ms(t0, t1);
+            profile_ticks_++;
+        }
         if (tick_count_ % 500 == 0) log_fps();
 
         // Update zone metrics every 10 ticks
-        if (tick_count_ % 10 == 0) compute_zone_metrics();
+        if (tick_count_ % 10 == 0) {
+            compute_zone_metrics();
+            if (profile_) prof_metrics_ms_ += elapsed_ms(phase_start, mark());
+        }
     }
 
     void broadcast_state(network::WebSocketServer* ws_server) {
@@ -504,7 +569,7 @@ private:
     double route_spread_ = 0.0;
     std::string city_name_;
     std::vector<int64_t> valid_nodes_;
-    Quadtree<double> qt_{0, 0, 1, 1};
+    SpatialGrid<double> grid_;
 
     // Phase 4.3 LOD culling: viewport bounds received from the dashboard.
     double min_lat_ = 0.0;
@@ -557,6 +622,9 @@ private:
     static constexpr double kPolicyInterval = 5.0; // seconds between decisions
     std::unordered_map<std::pair<int64_t,int64_t>,int,PairHash> wait_counts_;
     std::string signal_mode_ = "webster";
+    std::unordered_map<int64_t, std::unique_ptr<SignalPolicy>> signal_policies_;
+    std::unordered_map<int64_t, std::pair<double, double>> signal_inputs_;
+    double last_signal_input_refresh_ = -1e9;
 
     // Metrics & What-If Policy
     RoutingPolicy routing_policy_;
@@ -572,6 +640,18 @@ private:
     core::LatencyHistogram tick_histogram_;
     uint64_t tick_count_ = 0;
 
+    // Optional per-phase profiling (--profile)
+    bool profile_ = false;
+    uint64_t profile_ticks_ = 0;
+    double prof_od_ms_ = 0.0;
+    double prof_sig_ms_ = 0.0;
+    double prof_snap_ms_ = 0.0;
+    double prof_qt_ms_ = 0.0; // spatial grid rebuild (historically the quadtree)
+    double prof_agents_ms_ = 0.0;
+    double prof_emit_ms_ = 0.0;
+    double prof_metrics_ms_ = 0.0;
+    double prof_total_ms_ = 0.0;
+
     void precompute_edge_lengths() {
         for (const auto& e : graph_.get_edges())
             edge_len_[std::make_pair(e.u, e.v)] = e.length_m;
@@ -580,6 +660,14 @@ private:
     double lookup_edge_len(int64_t u, int64_t v) const {
         auto it = edge_len_.find(std::make_pair(u, v));
         return it != edge_len_.end() ? it->second : 100.0;
+    }
+
+    // SplitMix64 finalizer: cheap deterministic per-(agent,tick) randomness.
+    static uint64_t mix64(uint64_t x) {
+        x += 0x9E3779B97F4A7C15ULL;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+        return x ^ (x >> 31);
     }
 
     void update_od_spawns(double dt) {
@@ -625,6 +713,8 @@ private:
                 agents_.journey_time[idx] = -1.0;
                 return;
             }
+            agents_.cur_edge_len[idx] = lookup_edge_len(
+                agents_.path[idx][0], agents_.path[idx][1]);
             agents_.target_speed[idx] =
                 get_default_idm_params(t, chaos_coefficient_).v0
                 * speed_factor_;
@@ -709,7 +799,8 @@ private:
         const Node* nv = graph_.get_node(v);
         if (!nu || !nv) { snap_x_[i] = 0; snap_y_[i] = 0; snap_lat_[i] = 0; snap_lon_[i] = 0; return; }
 
-        double elen = lookup_edge_len(u, v);
+        double elen = agents_.cur_edge_len[i];
+        if (elen <= 0.0) elen = 100.0;
         double t = (elen > 0)
             ? std::max(0.0, std::min(1.0, agents_.position[i] / elen))
             : 0.0;
@@ -733,7 +824,7 @@ private:
             qt_xs_[k] = snap_x_[active[k]];
             qt_ys_[k] = snap_y_[active[k]];
         }
-        qt_.rebuild(qt_xs_, qt_ys_, active);
+        grid_.rebuild(qt_xs_, qt_ys_, active, 30.0);
     }
 
     void update_agent(size_t i, double dt) {
@@ -764,7 +855,8 @@ private:
             if (sig_it != signals_.end()) {
                 int64_t u = path[ei];
                 if (!sig_it->second->is_green(u)) {
-                    double elen = lookup_edge_len(u, next_node);
+                    double elen = agents_.cur_edge_len[i];
+                    if (elen <= 0.0) elen = 100.0;
                     double dist_to_signal = elen - agents_.position[i];
                     if (dist_to_signal <= 25.0) {
                         agents_.velocity[i] = std::max(0.0, agents_.velocity[i] - p.b * dt);
@@ -796,7 +888,7 @@ private:
         double follow_dist = agents_.target_speed[i] * 3.0 + 20.0;
         static thread_local std::vector<QuadPoint<double>> tl_nearby;
         tl_nearby.clear();
-        qt_.query_radius(ax, ay, follow_dist, tl_nearby);
+        grid_.query_capsule(ax, ay, dx, dy, follow_dist, 5.0, tl_nearby);
 
         double best_s = 1e18;
         double best_v = 0;
@@ -835,17 +927,19 @@ private:
                     * chaos_coefficient_ * dt * 0.5;
         if (prob <= 0) return;
 
-        std::mt19937 rng(agents_.id[i] + tick_count_);
-        std::uniform_real_distribution<double> coin(0.0, 1.0);
-        if (coin(rng) >= prob) return;
-
+        // Counter-based mixing instead of constructing a 624-word mt19937 per
+        // agent per tick (that construction dominated this path at 20k agents).
+        uint64_t h = mix64(static_cast<uint64_t>(agents_.id[i])
+                           ^ (static_cast<uint64_t>(tick_count_)
+                              * 0x9E3779B97F4A7C15ULL));
+        if ((h >> 11) * 0x1.0p-53 >= prob) return;
         size_t ei = static_cast<size_t>(agents_.current_edge_idx[i]);
         const auto& path = agents_.path[i];
         if (ei + 1 >= path.size()) return;
         int32_t max_lane = get_num_lanes(path[ei], path[ei + 1]) - 1;
         if (max_lane <= 0) return;
 
-        int32_t dir = (coin(rng) < 0.5) ? -1 : 1;
+        int32_t dir = ((mix64(h) >> 11) * 0x1.0p-53 < 0.5) ? -1 : 1;
         int32_t target = agents_.lane[i] + dir;
         if (target < 0 || target > max_lane) return;
 
@@ -858,7 +952,7 @@ private:
 
         static thread_local std::vector<QuadPoint<double>> tl_lateral;
         tl_lateral.clear();
-        qt_.query_radius(tx, ty, 5.0, tl_lateral);
+        grid_.query_radius(tx, ty, 5.0, tl_lateral);
 
         bool blocked = false;
         for (const auto& pt : tl_lateral) {
@@ -881,8 +975,8 @@ private:
             mark_arrived(i);
             return;
         }
-        int64_t u = path[ei], v = path[ei + 1];
-        double elen = lookup_edge_len(u, v);
+        double elen = agents_.cur_edge_len[i];
+        if (elen <= 0.0) elen = 100.0;
 
         if (agents_.position[i] >= elen) {
             agents_.position[i] -= elen;
@@ -892,6 +986,8 @@ private:
                 mark_arrived(i);
             else {
                 agents_.lane[i] = 0;
+                const size_t ni = static_cast<size_t>(agents_.current_edge_idx[i]);
+                agents_.cur_edge_len[i] = lookup_edge_len(path[ni], path[ni + 1]);
             }
         }
     }
@@ -909,6 +1005,7 @@ private:
     // one batched inference call; SWITCH cuts the current green short while
     // EXTEND leaves Webster timing in effect for that controller.
     void maybe_apply_policy() {
+        if (signal_mode_ != "rl") return; // adaptive fuzzy modes own the timing
         if (!policy_ || !policy_->is_loaded()) return;
         if (sim_time_ - last_policy_tick_ < kPolicyInterval) return;
         last_policy_tick_ = sim_time_;
@@ -927,6 +1024,53 @@ private:
             if (actions[k] == 1) sc->end_green(); // SWITCH
             ++k;
         }
+    }
+
+    // Ticks every signal, routing through an adaptive policy when one is
+    // installed for that intersection. Demand inputs are refreshed once per
+    // simulated second (cheap single pass over active agents).
+    void tick_signals(double dt) {
+        if (signal_policies_.empty()) {
+            for (auto& [id, sc] : signals_) sc->tick(dt);
+            return;
+        }
+        if (sim_time_ - last_signal_input_refresh_ >= 1.0) {
+            last_signal_input_refresh_ = sim_time_;
+            refresh_signal_inputs();
+        }
+        for (auto& [id, sc] : signals_) {
+            auto pit = signal_policies_.find(id);
+            if (pit != signal_policies_.end() && pit->second) {
+                auto iit = signal_inputs_.find(id);
+                const double q = iit != signal_inputs_.end() ? iit->second.first : 0.0;
+                const double w = iit != signal_inputs_.end() ? iit->second.second : 0.0;
+                pit->second->set_inputs(q, w);
+                pit->second->tick(dt);
+            } else {
+                sc->tick(dt);
+            }
+        }
+    }
+
+    // Aggregate queued vehicles and mean wait per signalized node.
+    void refresh_signal_inputs() {
+        signal_inputs_.clear();
+        for (const auto& [id, sc] : signals_) signal_inputs_[id] = {0.0, 0.0};
+        for (size_t i = 0; i < agents_.size(); ++i) {
+            if (agents_.state[i] != AgentState::Spawned
+                && agents_.state[i] != AgentState::Navigating)
+                continue;
+            if (agents_.velocity[i] > 0.5) continue;
+            const size_t ei = static_cast<size_t>(agents_.current_edge_idx[i]);
+            const auto& p = agents_.path[i];
+            if (ei + 1 >= p.size()) continue;
+            auto it = signal_inputs_.find(p[ei + 1]);
+            if (it == signal_inputs_.end()) continue;
+            it->second.first += 1.0;
+            it->second.second += agents_.wait_time[i];
+        }
+        for (auto& [id, agg] : signal_inputs_)
+            if (agg.first > 0.0) agg.second /= agg.first;
     }
 
     // Counts agents currently queued (near-zero velocity) per incoming edge

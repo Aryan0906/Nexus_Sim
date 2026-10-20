@@ -23,7 +23,7 @@ help:
 	@echo "    make run CITY=piedmont AGENTS=1000 DURATION=10"
 
 build:
-	cd engine && mkdir -p build && cd build && cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=OFF && cmake --build .
+	cd engine && mkdir -p build && cd build && cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON && cmake --build .
 
 demo: build
 	cd dashboard && npm install --silent && npm run build
@@ -35,6 +35,7 @@ run: build
 test:
 	cd engine && mkdir -p build && cd build && cmake .. -G Ninja -DENABLE_TESTING=ON && cmake --build . && ctest --output-on-failure
 	cd pipeline && pip install -q -r requirements.txt && python -m pytest tests/ -v
+	cd ml && pip install -q -r requirements.txt && python -m pytest tests/ -v
 	cd dashboard && npm install --silent && npm run test
 
 bench:

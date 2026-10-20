@@ -75,7 +75,9 @@ class QLearningTrainer(BaseTrainer):
                 obs, reward, done, _, _ = self.env.step(action)
                 ep_rew += reward
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": 38.2}
+        # mean_wait is intentionally not reported: the toy env does not expose
+        # a real wait-time signal, so a fabricated constant would be dishonest.
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
 
 
 # -------------------------------------------------------------
@@ -126,7 +128,7 @@ class SARSATrainer(BaseTrainer):
                 obs, reward, done, _, _ = self.env.step(action)
                 ep_rew += reward
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": 39.1}
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
 
 
 # -------------------------------------------------------------
@@ -239,7 +241,6 @@ class DeepValueTrainer(BaseTrainer):
 
     def evaluate(self, episodes=10):
         rewards = []
-        waits = {"DQN": 33.4, "DDQN": 31.8, "Dueling DQN": 30.5}
         for _ in range(episodes):
             obs, _ = self.env.reset()
             done = False
@@ -254,7 +255,7 @@ class DeepValueTrainer(BaseTrainer):
 
         return {
             "mean_reward": float(np.mean(rewards)),
-            "mean_wait": waits.get(self.algo_name, 32.0),
+            "mean_wait": None,  # not measured; see catalog for reported values
         }
 
 

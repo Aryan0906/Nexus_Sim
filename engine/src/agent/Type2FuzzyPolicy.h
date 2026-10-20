@@ -45,6 +45,15 @@ private:
     IntervalType2MF w_medium_{{25.0, 60.0, 95.0}, {15.0, 60.0, 105.0}};
     IntervalType2MF w_long_{{85.0, 150.0, 1e9}, {75.0, 150.0, 1e9}};
 
+    // Demand inputs, refreshed by Simulation once per simulated second.
+    double queue_len_ = 0.0;
+    double wait_time_ = 0.0;
+
+    // Green extension budget for the current phase (max 15 s).
+    double extension_used_ = 0.0;
+    int last_phase_ = -1;
+    int last_state_ = -1;
+
 public:
     explicit Type2FuzzyPolicy(SignalController* controller) : controller_(controller) {}
 
@@ -71,8 +80,38 @@ public:
         return std::max(0.0, std::min(15.0, (y_left + y_right) / 2.0));
     }
 
+    void set_inputs(double queue_len, double wait_time) override {
+        queue_len_ = queue_len;
+        wait_time_ = wait_time;
+    }
+
+    // Adaptive green extension driven by the type-reduced fuzzy output.
     void tick(double dt) override {
-        if (controller_) controller_->tick(dt);
+        if (!controller_) return;
+
+        const int phase = controller_->current_phase_idx;
+        const int state = static_cast<int>(controller_->current_state);
+        if (phase != last_phase_
+            || (state != last_state_
+                && controller_->current_state == SignalController::PhaseState::GREEN)) {
+            extension_used_ = 0.0;
+        }
+
+        if (controller_->current_state == SignalController::PhaseState::GREEN
+            && controller_->current_timer <= dt + 1e-9
+            && extension_used_ < 15.0) {
+            const double ext = std::clamp(
+                compute_green_extension(queue_len_, wait_time_),
+                0.0, 15.0 - extension_used_);
+            if (ext > 0.5) {
+                controller_->current_timer += ext;
+                extension_used_ += ext;
+            }
+        }
+
+        controller_->tick(dt);
+        last_phase_ = controller_->current_phase_idx;
+        last_state_ = static_cast<int>(controller_->current_state);
     }
 
     bool is_green(int64_t incoming_edge_id) const override {

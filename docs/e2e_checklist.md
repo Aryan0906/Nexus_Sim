@@ -16,8 +16,15 @@ assume earlier ones passed.
 
 - [ ] Working tree builds clean: `cd engine/build && cmake --build .`
 - [ ] C++ unit tests pass: `ctest --output-on-failure` (from `engine/build`)
+      — first confirm tests are actually configured: `ctest -N` must list 56
+      tests. If it lists none, the build dir was configured with
+      `ENABLE_TESTING=OFF` (old `make build` did this); reconfigure with
+      `cmake -S engine -B engine/build -DENABLE_TESTING=ON`. Stale test
+      binaries are the one failure mode that can make a broken change look green.
 - [ ] Python tests pass: `cd pipeline && python -m pytest tests/ -q`
+- [ ] ML tests pass: `python -m pytest ml/tests -q` (from the repo root)
 - [ ] Dashboard tests pass: `cd dashboard && npm run test`
+- [ ] Test inventory matches the README: CTest 56 + `ml/tests` 84 + `pipeline/tests` 35 + Vitest 8 = **183**
 
 > On Windows/MinGW the test binary needs the compiler's runtime DLLs on `PATH`.
 > If `engine_test.exe` exits immediately with no output, that is the cause —
@@ -69,6 +76,11 @@ agents randomly.
 - [ ] `Initialized N signal controllers` appears with `N > 0`
 - [ ] `Loaded N OD pairs` appears (OD mode) with `N > 0`
 - [ ] `[FPS]` lines appear and `avg` tick time stays well under 100 ms
+- [ ] Signal-mode switch works from the CLI (P4): run with
+      `--signal-mode fuzzy` and `--signal-mode type2_fuzzy` — the startup log
+      prints the requested mode and the run still completes (adaptive green
+      extension is driven by per-intersection queue/wait demand, refreshed once
+      per simulated second)
 - [ ] `journey_times.csv` is written and contains rows with status `Arrived`
 - [ ] Some agents actually complete — an all-`Navigating` file means agents are
       stuck (usually a broken graph or an over-restrictive signal phase)
@@ -108,6 +120,13 @@ confirming that refusal is itself a check.
 - [ ] Toggle **Efficiency** ↔ **Equity** view; the equity overlay renders
       per-zone bubbles
 - [ ] Top-5 congested zones chart populates
+- [ ] Right-dock **tick badge** shows the engine's simulation `tick` and advances
+- [ ] Right-dock **Algos** tab renders the 48-algorithm explorer (12 per subject)
+      from `/data/36_algo_matrix.json` (legacy filename, 48 entries)
+- [ ] Policy buttons include **Fuzzy (Mamdani)** and **Type-2 Fuzzy**; switching
+      to each updates the mode pill and keeps the simulation running
+- [ ] `performance_summary` in the algo matrix labels measured values as
+      measured and catalog claims as not measured
 
 ### 4a. Level-of-detail culling (Phase 4.3)
 
@@ -127,8 +146,16 @@ confirming that refusal is itself a check.
 
 ## 5. Performance spot-check
 
-- [ ] `make bench` (or run `engine/build/bench_quadtree`) — quadtree beats naive
-      search by ≥ 10× at 10,000 agents
+- [ ] `make bench` (or run `engine/build/bench_quadtree`) — indexed search beats
+      naive by ≥ 10× at 10,000 agents (historical quadtree benchmark; the
+      runtime index is now the counting-sort uniform grid)
+- [ ] 20k gate (P2): `engine.exe --city piedmont --agents 20000 --duration 1
+      --fast --no-ws --profile` reports **avg ≤ 16.7 ms and p95 ≤ 25 ms**
+      (measured 2026-10: 8.64 ms avg / 12 ms p95; see
+      `docs/evidence/p2_performance.md`)
+- [ ] ONNX inference p95 ≤ 8 ms: `engine/build/bench_inference --provider cpu`
+      (measured 0.05 ms p95; the optional `--provider cuda` path is an
+      experiment and falls back to CPU when the CUDA EP is unavailable)
 - [ ] Stress test passes: the 20,000-agent case in `engine/tests/test_stress.cpp`
 - [ ] No unbounded memory growth over a long run
 
@@ -150,6 +177,20 @@ confirming that refusal is itself a check.
 
 ---
 
+## 5b. GPU paths (P7 / P8)
+
+- [ ] Training picks the GPU automatically:
+      `.venv\Scripts\python.exe -m train.train --city toy --episodes 1` logs
+      `Training device: cuda (<GPU name>)` on a CUDA-enabled torch build; on
+      CPU-only machines the same command logs `Training device: cpu`
+- [ ] ONNX provider selection: `engine/build/bench_inference --provider auto`
+      prints `Provider active: cuda` when a CUDA-enabled ONNX Runtime is
+      linked, otherwise falls back to `Provider active: cpu` with a logged
+      reason (the engine stays fully functional on CPU). The engine CLI default
+      is now `--onnx-provider auto` (GPU-first), so no flag is needed.
+
+---
+
 ## 6. Repo hygiene
 
 - [ ] No stray generated files staged (`journey_times.csv`, `build/`, `*.graphml`)
@@ -164,3 +205,52 @@ confirming that refusal is itself a check.
 Note the date, commit SHA, city, and any box that failed with its reason. A
 failed box left unexplained is the thing most likely to resurface as a
 "mysterious" bug two phases later.
+
+---
+
+## 2026-10 Audit — What Was Found And Fixed
+
+Reproduction commands and measurements for every item below live in
+`docs/evidence/`.
+
+- **Stale C++ test binaries.** `engine/build/CMakeCache.txt` had
+  `ENABLE_TESTING=OFF` (set by `make build`), so `ctest` was running a
+  September-dated `engine_test.exe` with **44** tests while the real suite
+  has **56**. A green `ctest` was therefore not evidence of anything.
+  Fixed: `make build` now configures with `-DENABLE_TESTING=ON`, and this
+  checklist requires `ctest -N` to list 56 tests before trusting a run.
+- **Fake benchmark numbers.** `benchmark_36.py` copied hard-coded catalog
+  strings; eight RL `evaluate()` methods returned constant `mean_wait` values
+  that were never measured. They now return `None` / `n/a (not measured)`, and
+  the generated matrix carries a `metrics_provenance` field.
+- **Fuzzy policies were label-only.** `FuzzyPolicy::tick` just delegated to
+  the controller, so fuzzy inference never touched signal timing. Now wired
+  with a 15 s green-extension budget and covered by three regression tests
+  (`FuzzyPolicyWiringTest.*`).
+- **Orphaned dashboard UI.** `AlgoExplorer` had no consumer and the WebSocket
+  hook ignored `tick`. Both are now mounted/consumed, with a right-dock tab and
+  a tick badge.
+- **Missing Python dependencies.** `httpx`/`rapidfuzz` were listed in
+  `requirements.txt` but uninstalled, and `opencv-python` was absent entirely,
+  so CV/NLP sidecar fallbacks were silently synthetic. Added and installed.
+- **README contradicted the code** on test counts (117 vs 171), pacing
+  (60 FPS vs measured ~110 ticks/s), the spatial index (quadtree vs. the
+  runtime uniform grid), and ONNX latency (`0.0808 ms` vs measured
+  ~0.04–0.08 ms p95).
+
+### Deviations from the plan, and why
+
+- **Schema unification was not performed.** The checkpoint
+  (`{"policy_state","value_state"}`) is already consistent across `train.py`,
+  `transfer.py` and `evaluate.py`, and the FlatBuffers state-frame schema
+  (`agent_delta.fbs`) is compiled but unused on the live JSON path by design.
+  No code change was needed.
+- **Catalog "36 → 48" metrics were not re-measured.** Real YOLO/U-Net/Mask
+  R-CNN weights are not in the repo, so those rows remain catalog design
+  targets — now explicitly labelled instead of presented as empirical results.
+- **The CUDA execution-provider experiment (P8) is incomplete.** Provider
+  plumbing, CLI flag, availability probe and CPU fallback all landed and are
+  tested on the CPU build. Linking a 280 MB ONNX Runtime **GPU** package was
+  attempted but the download did not finish inside the time box, so the CUDA EP
+  was not exercised end-to-end. Documented as unfinished rather than claimed as
+  working.

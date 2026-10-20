@@ -1,0 +1,24 @@
+$kind: http-request
+name: 'C12 - POST /chat'
+order: 2000
+method: POST
+url: '{{nlp}}/chat'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "set signal mode fuzzy",
+      "city": "chicago"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('C12 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('C12 - Has intent', () => { pm.expect(pm.response.json()).to.have.property('intent'); });
+      pm.test('C12 - Has answer', () => { pm.expect(pm.response.json()).to.have.property('answer'); });
+      pm.test('C12 - Has confidence', () => { pm.expect(pm.response.json()).to.have.property('confidence'); });
+      pm.test('C12 - Has handler', () => { pm.expect(pm.response.json()).to.have.property('handler'); });

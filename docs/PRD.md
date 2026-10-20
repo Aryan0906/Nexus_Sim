@@ -75,7 +75,7 @@ Reviews code architecture, model design decisions, and validation methodology ac
 ### F1 — C++ Simulation Engine (Phases 0–4)
 - Directed graph loaded from a cleaned OpenStreetMap export
 - Agent types: car, bus, auto-rickshaw, two-wheeler, informal shuttle, pedestrian
-- Quadtree spatial index for O(N log N) proximity detection
+- Uniform-grid spatial index for O(N) proximity detection (quadtree retained for benchmark comparison)
 - Thread pool with Structure-of-Arrays (SoA) memory layout
 - Outputs delta-compressed binary state stream over WebSocket
 - OD-driven agent spawning from real trip demand (Phase 6)
@@ -178,7 +178,7 @@ Reviews code architecture, model design decisions, and validation methodology ac
 | Metric | Target |
 |--------|--------|
 | Simulation throughput | ≥ 20,000 agents at 60 fps, no frame drops over 10-minute runs |
-| Quadtree vs. naive | ≥ 10× faster proximity search at 10,000 agents |
+| Spatial index vs. naive | ≥ 10× faster proximity search at 10,000 agents |
 | MARL vs. baseline | ≥ 15% reduction in citywide average wait time vs. fixed-cycle baseline |
 | Equity improvement | Gini coefficient across zones decreases by ≥ 10% vs. fixed-cycle baseline |
 | Validation accuracy | Simulated corridor journey times within 20% (checkpoint: ≤ 25% MAPE AND ≥ 75% corridors within 25%) of Chicago TNP ground truth |

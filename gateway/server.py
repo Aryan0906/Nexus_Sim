@@ -20,7 +20,14 @@ import uvicorn
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import StreamingResponse
+import ssl
 import websockets
+
+# Trust the local self-signed cert for ALL upstream connections (the
+# sidecars and engine serve TLS with certs/server.{crt,key}).
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 app = FastAPI(
     title="NexusSim Unified Backend Gateway",
@@ -38,12 +45,12 @@ app.add_middleware(
 )
 
 # Target service URLs (configurable via environment variables for Docker)
-ENGINE_WS_URL = os.environ.get("ENGINE_WS_URL", "ws://127.0.0.1:9001")
-CAMERA_HTTP_URL = os.environ.get("CAMERA_HTTP_URL", "http://127.0.0.1:9003")
-NLP_HTTP_URL = os.environ.get("NLP_HTTP_URL", "http://127.0.0.1:9004")
-EVENT_BUS_HTTP_URL = os.environ.get("EVENT_BUS_HTTP_URL", "http://127.0.0.1:9005")
-EVENT_BUS_WS_URL = os.environ.get("EVENT_BUS_WS_URL", "ws://127.0.0.1:9005/ws/events")
-ALGO_HTTP_URL = os.environ.get("ALGO_HTTP_URL", "http://127.0.0.1:9006")
+ENGINE_WS_URL = os.environ.get("ENGINE_WS_URL", "wss://127.0.0.1:9001")
+CAMERA_HTTP_URL = os.environ.get("CAMERA_HTTP_URL", "https://127.0.0.1:9003")
+NLP_HTTP_URL = os.environ.get("NLP_HTTP_URL", "https://127.0.0.1:9004")
+EVENT_BUS_HTTP_URL = os.environ.get("EVENT_BUS_HTTP_URL", "https://127.0.0.1:9005")
+EVENT_BUS_WS_URL = os.environ.get("EVENT_BUS_WS_URL", "wss://127.0.0.1:9005/ws")
+ALGO_HTTP_URL = os.environ.get("ALGO_HTTP_URL", "https://127.0.0.1:9006")
 
 GATEWAY_PORT = int(os.environ.get("GATEWAY_PORT", "8000"))
 
@@ -67,7 +74,7 @@ async def gateway_health() -> Dict[str, Any]:
     }
 
     # Ping HTTP sidecars asynchronously
-    async with httpx.AsyncClient(timeout=1.0) as client:
+    async with httpx.AsyncClient(timeout=1.0, verify=False) as client:
         for name, base_url in [
             ("camera", CAMERA_HTTP_URL),
             ("nlp", NLP_HTTP_URL),
@@ -96,7 +103,7 @@ async def _proxy_http(request: Request, target_url: str) -> Response:
     headers = dict(request.headers)
     headers.pop("host", None)
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
         try:
             req = client.build_request(
                 method=request.method,
@@ -175,7 +182,7 @@ async def proxy_engine_ws(client_ws: WebSocket) -> None:
     """Bidirectional WebSocket proxy to C++ Simulation Engine (port 9001)."""
     await client_ws.accept()
     try:
-        async with websockets.connect(ENGINE_WS_URL, max_size=10 * 1024 * 1024) as server_ws:
+        async with websockets.connect(ENGINE_WS_URL, max_size=10 * 1024 * 1024, ssl=_SSL_CTX) as server_ws:
             async def forward_client_to_server():
                 try:
                     while True:
@@ -211,7 +218,7 @@ async def proxy_event_bus_ws(client_ws: WebSocket) -> None:
     """Bidirectional WebSocket proxy to Cross-Subject Event Bus (port 9005)."""
     await client_ws.accept()
     try:
-        async with websockets.connect(EVENT_BUS_WS_URL) as server_ws:
+        async with websockets.connect(EVENT_BUS_WS_URL, ssl=_SSL_CTX) as server_ws:
             async def forward_client():
                 try:
                     while True:
@@ -234,7 +241,18 @@ async def proxy_event_bus_ws(client_ws: WebSocket) -> None:
 
 def main():
     print(f"Starting NexusSim Unified Backend Gateway on port {GATEWAY_PORT}...")
-    uvicorn.run("gateway.server:app", host="0.0.0.0", port=GATEWAY_PORT, reload=False, log_level="info")
+    # HTTPS by default: serve TLS when certs are present (certs/ is generated
+    # by scripts/gen_certs.sh; override with SSL_CERT/SSL_KEY env vars).
+    ssl_cert = os.environ.get("SSL_CERT", "certs/server.crt")
+    ssl_key = os.environ.get("SSL_KEY", "certs/server.key")
+    ssl_kwargs = {}
+    if os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+        ssl_kwargs = {"ssl_certfile": ssl_cert, "ssl_keyfile": ssl_key}
+        print(f"TLS enabled: {ssl_cert}")
+    else:
+        print("WARNING: certs/server.{crt,key} not found; serving plain HTTP")
+    uvicorn.run("gateway.server:app", host="0.0.0.0", port=GATEWAY_PORT,
+                reload=False, log_level="info", **ssl_kwargs)
 
 
 if __name__ == "__main__":

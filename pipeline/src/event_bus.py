@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from typing import Any, Callable, Dict, List, Set
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -124,7 +125,17 @@ async def websocket_event_stream(ws: WebSocket):
 
 def main():
     print("Starting Cross-Subject Event Bus Sidecar on port 9005...")
-    uvicorn.run(app, host="0.0.0.0", port=9005, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=9005, log_level="info", **_ssl_kwargs())
+
+
+def _ssl_kwargs():
+    cert = os.environ.get("SSL_CERT", "certs/server.crt")
+    key = os.environ.get("SSL_KEY", "certs/server.key")
+    if os.path.exists(cert) and os.path.exists(key):
+        print(f"TLS enabled: {cert}")
+        return {"ssl_certfile": cert, "ssl_keyfile": key}
+    print("WARNING: certs/server.{crt,key} not found; serving plain HTTP")
+    return {}
 
 
 if __name__ == "__main__":

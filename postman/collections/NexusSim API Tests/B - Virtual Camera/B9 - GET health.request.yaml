@@ -1,0 +1,13 @@
+$kind: http-request
+name: 'B9 - GET /health'
+order: 1000
+method: GET
+url: '{{camera}}/health'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('B9 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('B9 - status is ok', () => { pm.expect(pm.response.json().status).to.eql('ok'); });
+      pm.test('B9 - service is virtual_camera', () => { pm.expect(pm.response.json().service).to.eql('virtual_camera'); });
+      pm.test('B9 - port is 9003', () => { pm.expect(pm.response.json().port).to.eql(9003); });

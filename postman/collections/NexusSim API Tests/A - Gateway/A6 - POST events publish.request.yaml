@@ -1,0 +1,22 @@
+$kind: http-request
+name: 'A6 - POST /api/events/publish/cv.anomaly'
+order: 6000
+method: POST
+url: '{{gateway}}/api/events/publish/cv.anomaly'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "message": "test anomaly",
+      "severity": "low"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('A6 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('A6 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });
+      pm.test('A6 - Has topic', () => { pm.expect(pm.response.json()).to.have.property('topic'); });

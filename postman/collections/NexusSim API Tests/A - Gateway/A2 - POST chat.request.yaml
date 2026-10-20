@@ -1,0 +1,24 @@
+$kind: http-request
+name: 'A2 - POST /api/chat'
+order: 2000
+method: POST
+url: '{{gateway}}/api/chat'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "query": "what is the average wait time",
+      "city": "chicago"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('A2 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('A2 - Has intent', () => { pm.expect(pm.response.json()).to.have.property('intent'); });
+      pm.test('A2 - Has answer', () => { pm.expect(pm.response.json()).to.have.property('answer'); });
+      pm.test('A2 - Has confidence', () => { pm.expect(pm.response.json()).to.have.property('confidence'); });
+      pm.test('A2 - Has handler', () => { pm.expect(pm.response.json()).to.have.property('handler'); });

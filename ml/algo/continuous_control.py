@@ -114,7 +114,7 @@ class DDPGTrainer(BaseTrainer):
                 obs, reward, done, _, _ = self.env.step(d_act)
                 ep_rew += reward
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": 29.8}
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
 
 
 # -------------------------------------------------------------
@@ -130,7 +130,7 @@ class TD3Trainer(DDPGTrainer):
 
     def evaluate(self, episodes=10):
         res = super().evaluate(episodes=episodes)
-        res["mean_wait"] = 28.9
+        res["mean_wait"] = None
         return res
 
 
@@ -144,7 +144,7 @@ class SACTrainer(DDPGTrainer):
 
     def evaluate(self, episodes=10):
         res = super().evaluate(episodes=episodes)
-        res["mean_wait"] = 27.5
+        res["mean_wait"] = None
         return res
 
 

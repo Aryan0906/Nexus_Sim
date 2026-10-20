@@ -24,6 +24,16 @@ public:
     InferenceEngine(InferenceEngine&& other) noexcept;
     InferenceEngine& operator=(InferenceEngine&& other) noexcept;
 
+    // Execution provider preference: "cpu" (default), "cuda", or "auto"
+    // (CUDA when the linked ONNX Runtime build exposes it, else CPU).
+    // CUDA is an opt-in experiment: the policy graph is tiny, so CPU often
+    // wins on latency. Set this before load(); a CUDA session that fails to
+    // initialise (missing driver/cuDNN DLLs) automatically retries on CPU.
+    void set_provider(const std::string& provider) { provider_ = provider; }
+
+    // Provider actually used by the loaded session ("cpu" or "cuda").
+    std::string active_provider() const { return active_provider_; }
+
     // Load an .onnx model. Returns false on failure (missing file, bad
     // graph, or no ONNX support compiled in) with the reason on stderr.
     bool load(const std::string& model_path);
@@ -50,6 +60,8 @@ private:
     size_t obs_dim_ = 0;
     size_t num_actions_ = 0;
     bool loaded_ = false;
+    std::string provider_ = "cpu";
+    std::string active_provider_ = "cpu";
 };
 
 } // namespace ai

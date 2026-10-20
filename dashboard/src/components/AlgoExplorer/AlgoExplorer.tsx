@@ -33,7 +33,7 @@ export const AlgoExplorer: React.FC<AlgoExplorerProps> = ({ algorithms }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, letterSpacing: '0.02em' }}>
-            NEXUSSIM 36-ALGORITHM EXPLORER
+            NEXUSSIM 48-ALGORITHM EXPLORER
           </h3>
           <span style={{ fontSize: '11px', color: '#9ca3af' }}>
             Unified Portfolio across Computer Vision, Soft Computing, NLP & RL

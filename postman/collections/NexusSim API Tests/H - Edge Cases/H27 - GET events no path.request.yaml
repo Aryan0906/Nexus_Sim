@@ -1,0 +1,10 @@
+$kind: http-request
+name: 'H27 - GET /api/events (no path -> 404)'
+order: 3000
+method: GET
+url: '{{gateway}}/api/events'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('H27 - Expect 404 for missing path segment', () => { pm.response.to.have.status(404); });

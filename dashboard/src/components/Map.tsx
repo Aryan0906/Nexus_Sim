@@ -67,7 +67,7 @@ const buildGraphFeature = (data: any): any => {
 };
 
 export const Map: React.FC = () => {
-  const { agents, metrics, zoneMetrics, signals, isConnected, isReconnecting, engineCity, engineError, engineMode, simStatus, sendMessage, sendCommand, sendPolicySwitch, resetState } = useWebSocket(ENDPOINTS.ENGINE_WS);
+  const { agents, metrics, zoneMetrics, signals, simTick, isConnected, isReconnecting, engineCity, engineError, engineMode, simStatus, sendMessage, sendCommand, sendPolicySwitch, resetState } = useWebSocket(ENDPOINTS.ENGINE_WS);
   const [graphData, setGraphData] = useState<any>(null);
   const [rawGraph, setRawGraph] = useState<any>(null);
   const [graphLoading, setGraphLoading] = useState(false);
@@ -439,6 +439,7 @@ export const Map: React.FC = () => {
         onSwitch={sendPolicySwitch}
         signals={signals}
         onSwitchPolicy={sendPolicySwitch}
+        simTick={simTick}
         city={engineCity || selectedCity || 'chicago'}
         collapsed={isDockCollapsed}
         onToggleCollapse={() => setIsDockCollapsed((c) => !c)}

@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
     std::string model = "tests/fixtures/policy_toy.onnx";
     int iterations = 1000;
     size_t batch = 64;
+    std::string provider = "cpu";
 
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
@@ -41,16 +42,20 @@ int main(int argc, char** argv) {
         if (arg == "--model") model = next("--model");
         else if (arg == "--iters") iterations = std::atoi(next("--iters"));
         else if (arg == "--batch") batch = std::stoul(next("--batch"));
+        else if (arg == "--provider") provider = next("--provider");
     }
 
     std::cout << "NexusSim inference benchmark\n";
     std::cout << "Model: " << model << "\n";
+    std::cout << "Provider requested: " << provider << "\n";
 
     nexussim::ai::InferenceEngine engine;
+    engine.set_provider(provider);
     if (!engine.load(model)) {
         std::cerr << "Failed to load model; nothing to benchmark.\n";
         return 1;
     }
+    std::cout << "Provider active: " << engine.active_provider() << "\n";
     const size_t obs_dim = engine.obs_dim();
     std::cout << "Batch: " << batch << " x obs_dim=" << obs_dim
               << ", iters: " << iterations << "\n";

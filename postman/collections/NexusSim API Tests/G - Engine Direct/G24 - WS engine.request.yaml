@@ -1,0 +1,4 @@
+$kind: websocket-request
+name: 'G24 - WS ws://localhost:9001'
+order: 1000
+url: 'ws://localhost:9001'

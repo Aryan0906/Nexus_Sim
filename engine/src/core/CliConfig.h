@@ -15,11 +15,22 @@ struct EngineConfig {
     double start_hour = 8.0;
     bool fast = false;
     bool no_ws = false;
+    bool profile = false;
     std::string journey_csv = "journey_times.csv";
     double speed_factor = 0.55;
     double route_spread = 0.2;
     double chaos = 0.1;
     std::string policy_path;
+    // Signal control mode: auto (rl when a --policy model is loaded, else
+    // webster), or one of webster / rl / fuzzy / type2_fuzzy.
+    std::string signal_mode = "auto";
+    // ONNX execution provider: auto (default) uses the CUDA execution provider
+    // when the linked ONNX Runtime build exposes it, else falls back to CPU.
+    // Explicit values: cpu / cuda.
+    std::string onnx_provider = "auto";
+    // TLS certificate/key for wss:// (HTTPS for the engine WebSocket).
+    std::string ssl_cert;
+    std::string ssl_key;
     double dt = 0.1;
     int port = 9001;
 };
@@ -69,6 +80,16 @@ public:
             else if (arg == "--route-spread") cfg.route_spread = std::atof(next("--route-spread"));
             else if (arg == "--chaos") cfg.chaos = std::atof(next("--chaos"));
             else if (arg == "--policy") cfg.policy_path = next("--policy");
+            else if (arg == "--onnx-provider") {
+                cfg.onnx_provider = next("--onnx-provider");
+                if (cfg.onnx_provider != "cpu" && cfg.onnx_provider != "cuda"
+                    && cfg.onnx_provider != "auto") {
+                    std::cerr << "Invalid --onnx-provider value: expected cpu, cuda, or auto\n";
+                    std::exit(1);
+                }
+            }
+            else if (arg == "--ssl-cert") cfg.ssl_cert = next("--ssl-cert");
+            else if (arg == "--ssl-key") cfg.ssl_key = next("--ssl-key");
             else if (arg == "--port") {
                 int val = std::atoi(next("--port"));
                 if (val <= 0 || val > 65535) {
@@ -84,8 +105,18 @@ public:
                     std::exit(1);
                 }
             }
+            else if (arg == "--signal-mode") {
+                cfg.signal_mode = next("--signal-mode");
+                if (cfg.signal_mode != "auto" && cfg.signal_mode != "webster"
+                    && cfg.signal_mode != "rl" && cfg.signal_mode != "fuzzy"
+                    && cfg.signal_mode != "type2_fuzzy") {
+                    std::cerr << "Invalid --signal-mode value: expected auto, webster, rl, fuzzy, or type2_fuzzy\n";
+                    std::exit(1);
+                }
+            }
             else if (arg == "--fast") cfg.fast = true;
             else if (arg == "--no-ws") cfg.no_ws = true;
+            else if (arg == "--profile") cfg.profile = true;
         }
 
         return cfg;

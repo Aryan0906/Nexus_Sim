@@ -22,7 +22,7 @@ interface MetricsPanelProps {
   signalMode?: SignalMode;
   connected?: boolean;
   simActive?: boolean;
-  onSwitch?: (policy: 'webster' | 'rl') => void;
+  onSwitch?: (policy: 'webster' | 'rl' | 'fuzzy' | 'type2_fuzzy') => void;
   signals?: IntersectionSignalState[];
   onSwitchPolicy?: (policy: 'webster' | 'rl' | 'fuzzy', intersectionId?: number | null) => void;
   embedded?: boolean;

@@ -14,3 +14,6 @@ scripts:
       pm.test('K50 - Returns stats', () => {
         pm.expect(pm.response.json()).to.have.property('tracked_requests');
       });
+      pm.test('K50 - tracked_requests is a number', () => {
+        pm.expect(pm.response.json().tracked_requests).to.be.a('number');
+      });

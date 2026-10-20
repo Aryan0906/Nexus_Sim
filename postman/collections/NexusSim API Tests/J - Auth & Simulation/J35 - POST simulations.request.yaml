@@ -10,7 +10,7 @@ headers:
     value: application/x-www-form-urlencoded
 body:
   type: formdata
-  formdata:
+  content:
     - key: city_id
       value: chicago
       type: text
@@ -18,10 +18,10 @@ body:
       value: ws_default
       type: text
     - key: duration_min
-      value: 5
+      value: '5'
       type: text
     - key: agent_count
-      value: 100
+      value: '100'
       type: text
     - key: signal_mode
       value: auto
@@ -30,14 +30,15 @@ scripts:
   - type: afterResponse
     language: text/javascript
     code: |-
+      const json = pm.response.json();
       pm.test('J35 - Status 200', () => { pm.response.to.have.status(200); });
       pm.test('J35 - Returns simulation_id', () => {
-        const json = pm.response.json();
         pm.expect(json).to.have.property('simulation_id');
         pm.expect(json.status).to.eql('running');
         pm.expect(json.city_id).to.eql('chicago');
       });
-      // Store sim id for status check
+      pm.test('J35 - Has pid', () => { pm.expect(json).to.have.property('pid'); });
+      pm.test('J35 - Has message', () => { pm.expect(json).to.have.property('message'); });
       if (pm.response.code === 200) {
         pm.collectionVariables.set('test_sim_id', json.simulation_id);
       }

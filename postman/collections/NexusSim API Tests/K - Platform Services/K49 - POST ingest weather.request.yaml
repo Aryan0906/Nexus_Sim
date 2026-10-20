@@ -27,3 +27,4 @@ scripts:
         pm.expect(json.event.topic).to.eql('scenario.demand_spike');
         pm.expect(json.event.payload.demand_multiplier).to.be.below(1.0);
       });
+      pm.test('K49 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });

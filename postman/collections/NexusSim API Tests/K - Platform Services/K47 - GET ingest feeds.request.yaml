@@ -15,3 +15,9 @@ scripts:
         const types = pm.response.json().feeds.map(f => f.feed_type);
         pm.expect(types).to.include.members(['gtfs', 'cv2x', 'mqtt', 'weather']);
       });
+      pm.test('K47 - Each feed has topic', () => {
+        pm.response.json().feeds.forEach(f => {
+          pm.expect(f).to.have.property('feed_type');
+          pm.expect(f).to.have.property('topic');
+        });
+      });

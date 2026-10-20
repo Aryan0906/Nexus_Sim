@@ -9,3 +9,4 @@ scripts:
     code: |-
       pm.test('D16 - Status 200', () => { pm.response.to.have.status(200); });
       pm.test('D16 - Returns an array', () => { pm.expect(pm.response.json()).to.be.an('array'); });
+      pm.test('D16 - Response time < 2000ms', () => { pm.expect(pm.response.responseTime).to.be.below(2000); });

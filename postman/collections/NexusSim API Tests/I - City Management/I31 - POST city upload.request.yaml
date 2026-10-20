@@ -5,7 +5,7 @@ method: POST
 url: '{{gateway}}/api/cities/upload'
 body:
   type: formdata
-  formdata:
+  content:
     - key: city_id
       value: postman-test-city
       type: text
@@ -13,9 +13,8 @@ body:
       value: Postman Test City
       type: text
     - key: file
-      value: {}
       type: file
-      src: "{{postman_test_osm_file}}"
+      src: '{{postman_test_osm_file}}'
 scripts:
   - type: afterResponse
     language: text/javascript

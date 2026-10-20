@@ -21,3 +21,5 @@ scripts:
       pm.test('A3 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });
       pm.test('A3 - Has message', () => { pm.expect(pm.response.json()).to.have.property('message'); });
       pm.test('A3 - Has incident_spec', () => { pm.expect(pm.response.json()).to.have.property('incident_spec'); });
+      pm.test('A3 - incident_spec has type', () => { pm.expect(pm.response.json().incident_spec).to.have.property('type'); });
+      pm.test('A3 - Response time < 3000ms', () => { pm.expect(pm.response.responseTime).to.be.below(3000); });

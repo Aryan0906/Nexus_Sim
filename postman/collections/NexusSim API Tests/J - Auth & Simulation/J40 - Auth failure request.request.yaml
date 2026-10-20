@@ -8,7 +8,7 @@ headers:
     value: application/x-www-form-urlencoded
 body:
   type: formdata
-  formdata:
+  content:
     - key: username
       value: admin
       type: text
@@ -20,3 +20,4 @@ scripts:
     language: text/javascript
     code: |-
       pm.test('J40 - Status 401', () => { pm.response.to.have.status(401); });
+      pm.test('J40 - Has detail', () => { pm.expect(pm.response.json()).to.have.property('detail'); });

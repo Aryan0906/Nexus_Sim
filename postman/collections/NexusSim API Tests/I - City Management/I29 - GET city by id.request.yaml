@@ -8,9 +8,7 @@ scripts:
     language: text/javascript
     code: |-
       pm.test('I29 - Status 200', () => { pm.response.to.have.status(200); });
-      pm.test('I29 - Returns chicago', () => {
-        pm.expect(pm.response.json().city_id).to.eql('chicago');
-      });
-      pm.test('I29 - Has city_name', () => {
-        pm.expect(pm.response.json()).to.have.property('city_name');
-      });
+      pm.test('I29 - Returns chicago', () => { pm.expect(pm.response.json().city_id).to.eql('chicago'); });
+      pm.test('I29 - Has city_name', () => { pm.expect(pm.response.json()).to.have.property('city_name'); });
+      pm.test('I29 - Has source', () => { pm.expect(pm.response.json()).to.have.property('source'); });
+      pm.test('I29 - Has status ready', () => { pm.expect(pm.response.json().status).to.eql('ready'); });

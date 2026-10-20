@@ -11,6 +11,4 @@ scripts:
     language: text/javascript
     code: |-
       pm.test('K42 - Status 200', () => { pm.response.to.have.status(200); });
-      pm.test('K42 - Returns array', () => {
-        pm.expect(pm.response.json()).to.be.an('array');
-      });
+      pm.test('K42 - Returns array', () => { pm.expect(pm.response.json()).to.be.an('array'); });

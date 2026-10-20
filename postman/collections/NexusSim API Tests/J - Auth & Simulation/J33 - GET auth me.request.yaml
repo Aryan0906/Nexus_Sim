@@ -17,3 +17,5 @@ scripts:
         pm.expect(json).to.have.property('role');
         pm.expect(json).to.have.property('workspaces');
       });
+      pm.test('J33 - username is admin', () => { pm.expect(pm.response.json().username).to.eql('admin'); });
+      pm.test('J33 - role is admin', () => { pm.expect(pm.response.json().role).to.eql('admin'); });

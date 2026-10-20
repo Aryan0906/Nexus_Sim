@@ -10,7 +10,7 @@ headers:
     value: application/x-www-form-urlencoded
 body:
   type: formdata
-  formdata:
+  content:
     - key: status
       value: validated
       type: text
@@ -21,4 +21,8 @@ scripts:
       pm.test('K44 - Status 200', () => { pm.response.to.have.status(200); });
       pm.test('K44 - Validation updated', () => {
         pm.expect(pm.response.json().validation_status).to.eql('validated');
+      });
+      pm.test('K44 - status is updated', () => { pm.expect(pm.response.json().status).to.eql('updated'); });
+      pm.test('K44 - algo_id matches', () => {
+        pm.expect(pm.response.json().algo_id).to.eql(pm.collectionVariables.get('registered_algo_id'));
       });

@@ -8,7 +8,7 @@ headers:
     value: application/x-www-form-urlencoded
 body:
   type: formdata
-  formdata:
+  content:
     - key: username
       value: admin
       type: text

@@ -29,3 +29,4 @@ scripts:
         pm.expect(json.event.topic).to.eql('nlp.incident');
         pm.expect(json.event.payload.source).to.eql('GTFS-RT');
       });
+      pm.test('K48 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });

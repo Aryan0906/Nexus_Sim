@@ -10,3 +10,5 @@ scripts:
       pm.test('F23 - Status 200', () => { pm.response.to.have.status(200); });
       pm.test('F23 - total_algorithms is 48', () => { pm.expect(pm.response.json().total_algorithms).to.eql(48); });
       pm.test('F23 - Has metrics_provenance', () => { pm.expect(pm.response.json()).to.have.property('metrics_provenance'); });
+      pm.test('F23 - Has algorithms array', () => { pm.expect(pm.response.json()).to.have.property('algorithms'); });
+      pm.test('F23 - algorithms length is 48', () => { pm.expect(pm.response.json().algorithms).to.be.an('array').with.lengthOf(48); });

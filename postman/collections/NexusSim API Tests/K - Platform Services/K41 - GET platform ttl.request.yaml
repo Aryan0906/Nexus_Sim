@@ -16,3 +16,5 @@ scripts:
         pm.expect(json).to.have.property('ttl_seconds');
         pm.expect(json.ttl_seconds).to.be.above(0);
       });
+      pm.test('K41 - Has ttl_interval_seconds', () => { pm.expect(pm.response.json()).to.have.property('ttl_interval_seconds'); });
+      pm.test('K41 - Has active_simulations', () => { pm.expect(pm.response.json()).to.have.property('active_simulations'); });

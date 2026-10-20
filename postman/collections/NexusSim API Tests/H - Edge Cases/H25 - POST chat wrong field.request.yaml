@@ -17,3 +17,7 @@ scripts:
     language: text/javascript
     code: |-
       pm.test('H25 - Expect 422 for wrong field', () => { pm.response.to.have.status(422); });
+      pm.test('H25 - Has error detail', () => {
+        const json = pm.response.json();
+        pm.expect(json).to.satisfy(j => j.detail !== undefined || j.error !== undefined);
+      });

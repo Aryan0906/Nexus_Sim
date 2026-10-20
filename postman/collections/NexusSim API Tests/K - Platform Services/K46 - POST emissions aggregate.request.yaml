@@ -27,3 +27,4 @@ scripts:
         pm.expect(json.total_agents).to.eql(2);
         pm.expect(json.total_co2_g).to.be.above(0);
       });
+      pm.test('K46 - Has breakdown', () => { pm.expect(pm.response.json()).to.have.property('breakdown'); });

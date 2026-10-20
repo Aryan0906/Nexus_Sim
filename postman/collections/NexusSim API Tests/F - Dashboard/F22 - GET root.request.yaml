@@ -9,3 +9,4 @@ scripts:
     code: |-
       pm.test('F22 - Status 200', () => { pm.response.to.have.status(200); });
       pm.test('F22 - HTML contains id=root', () => { pm.expect(pm.response.text()).to.include('id="root"'); });
+      pm.test('F22 - Content-Type is text/html', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('text/html'); });

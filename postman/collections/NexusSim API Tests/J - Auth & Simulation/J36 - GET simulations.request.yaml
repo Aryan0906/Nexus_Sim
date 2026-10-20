@@ -11,6 +11,14 @@ scripts:
     language: text/javascript
     code: |-
       pm.test('J36 - Status 200', () => { pm.response.to.have.status(200); });
-      pm.test('J36 - Returns array', () => {
-        pm.expect(pm.response.json()).to.be.an('array');
+      pm.test('J36 - Returns array', () => { pm.expect(pm.response.json()).to.be.an('array'); });
+      pm.test('J36 - If sims exist, each has simulation_id', () => {
+        const arr = pm.response.json();
+        if (arr.length > 0) {
+          arr.forEach(s => {
+            pm.expect(s).to.have.property('simulation_id');
+            pm.expect(s).to.have.property('status');
+            pm.expect(s).to.have.property('city_id');
+          });
+        }
       });

@@ -10,7 +10,7 @@ headers:
     value: application/x-www-form-urlencoded
 body:
   type: formdata
-  formdata:
+  content:
     - key: algo_id
       value: postman_custom_rl
       type: text
@@ -37,4 +37,12 @@ scripts:
         pm.expect(json.algo.algo_id).to.eql('postman_custom_rl');
         pm.expect(json.algo.validation_status).to.eql('pending');
       });
-      pm.collectionVariables.set('registered_algo_id', pm.response.json().algo.algo_id);
+      pm.test('K43 - algo has required fields', () => {
+        const algo = pm.response.json().algo;
+        pm.expect(algo).to.have.property('name');
+        pm.expect(algo).to.have.property('discipline');
+        pm.expect(algo).to.have.property('version');
+      });
+      if (pm.response.code === 200) {
+        pm.collectionVariables.set('registered_algo_id', pm.response.json().algo.algo_id);
+      }

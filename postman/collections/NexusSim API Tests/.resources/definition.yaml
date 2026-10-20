@@ -17,3 +17,15 @@ variables:
     value: 'http://localhost:9006'
   - key: dashboard
     value: 'http://localhost:3000'
+  - key: auth_token
+    value: ''
+  - key: auth_user
+    value: ''
+  - key: test_sim_id
+    value: ''
+  - key: test_scenario_id
+    value: ''
+  - key: registered_algo_id
+    value: ''
+  - key: postman_test_osm_file
+    value: 'E:/Coding/Nexus_Sim/postman/test-city.osm'

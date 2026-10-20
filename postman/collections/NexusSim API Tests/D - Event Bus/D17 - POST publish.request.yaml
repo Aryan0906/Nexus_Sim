@@ -20,3 +20,4 @@ scripts:
       pm.test('D17 - Status 200', () => { pm.response.to.have.status(200); });
       pm.test('D17 - status is published', () => { pm.expect(pm.response.json().status).to.eql('published'); });
       pm.test('D17 - topic is cv.anomaly', () => { pm.expect(pm.response.json().topic).to.eql('cv.anomaly'); });
+      pm.test('D17 - Has subscribers_notified', () => { pm.expect(pm.response.json()).to.have.property('subscribers_notified'); });

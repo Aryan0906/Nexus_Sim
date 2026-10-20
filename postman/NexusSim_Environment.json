@@ -1,0 +1,42 @@
+{
+  "id": "nexussim-local-env",
+  "name": "NexusSim Local (HTTPS)",
+  "values": [
+    {
+      "key": "gw",
+      "value": "https://localhost:8000",
+      "enabled": true
+    },
+    {
+      "key": "engine",
+      "value": "https://localhost:9001",
+      "enabled": true
+    },
+    {
+      "key": "camera",
+      "value": "https://localhost:9003",
+      "enabled": true
+    },
+    {
+      "key": "nlp",
+      "value": "https://localhost:9004",
+      "enabled": true
+    },
+    {
+      "key": "eventbus",
+      "value": "https://localhost:9005",
+      "enabled": true
+    },
+    {
+      "key": "algo",
+      "value": "https://localhost:9006",
+      "enabled": true
+    },
+    {
+      "key": "dashboard",
+      "value": "https://localhost:3000",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

@@ -32,11 +32,14 @@ describe("Algorithm Matrix & Multi-Subject Catalog Suite", () => {
     }
   });
 
-  it("should specify verified performance highlights in performance_summary", () => {
-    expect(algoMatrix.performance_summary.fastest_subsystem).toContain("0.08 ms");
-    expect(algoMatrix.performance_summary.most_accurate_cv).toContain("97.5%");
-    expect(algoMatrix.performance_summary.best_calibration_optimizer).toContain("16.2%");
-    expect(algoMatrix.performance_summary.highest_rl_throughput).toContain("+26.3%");
+  it("should state measured-vs-catalog provenance honestly in performance_summary", () => {
+    // Verified numbers must be labelled as measured; unverified catalog
+    // claims must say so explicitly (2026-10 audit requirement).
+    expect(algoMatrix.performance_summary.fastest_subsystem).toContain("measured");
+    expect(algoMatrix.performance_summary.fastest_subsystem).toContain("measured range");
+    expect(algoMatrix.performance_summary.most_accurate_cv).toContain("Not independently measured");
+    expect(algoMatrix.performance_summary.best_calibration_optimizer).toContain("Not measured");
+    expect(algoMatrix.performance_summary.highest_rl_throughput).toContain("Not measured");
   });
 });
 

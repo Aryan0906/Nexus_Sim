@@ -8,8 +8,8 @@
 export const FRONTEND_PORT = 3000;
 export const BACKEND_PORT = 8000;
 
-export const BACKEND_HTTP = `http://localhost:${BACKEND_PORT}`;
-export const BACKEND_WS = `ws://localhost:${BACKEND_PORT}`;
+export const BACKEND_HTTP = `https://localhost:${BACKEND_PORT}`;
+export const BACKEND_WS = `wss://localhost:${BACKEND_PORT}`;
 
 export const ENDPOINTS = {
   /** C++ Simulation Engine WebSocket stream (via Gateway) */
@@ -27,7 +27,7 @@ export const ENDPOINTS = {
   /** Cross-Subject Event Bus WebSocket stream */
   EVENTS_WS: `${BACKEND_WS}/ws/events`,
 
-  /** 36-Algorithm Master Catalog REST endpoint */
+  /** 48-Algorithm Master Catalog REST endpoint (legacy 36_algo_matrix.json path) */
   ALGO_CATALOG: `${BACKEND_HTTP}/api/algo`,
 
   /** Gateway Health & Microservices status */

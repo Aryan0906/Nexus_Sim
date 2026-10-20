@@ -19,7 +19,7 @@ export interface Agent {
 // Signal control mode reported by the engine: "webster" (fixed-cycle
 // baseline) or "rl" (learned policy). "ai" is the legacy startup label the
 // engine no longer emits but older engines still do — treated as rl.
-export type SignalMode = 'rl' | 'ai' | 'webster' | 'fuzzy' | null;
+export type SignalMode = 'rl' | 'ai' | 'webster' | 'fuzzy' | 'type2_fuzzy' | null;
 
 export interface IntersectionSignalState {
   id: number;
@@ -32,6 +32,7 @@ interface UseWebSocketResult {
   metrics: any;
   zoneMetrics: any[];
   signals: IntersectionSignalState[];
+  simTick: number | null;
   isConnected: boolean;
   isReconnecting: boolean;
   engineCity: string | null;
@@ -40,7 +41,7 @@ interface UseWebSocketResult {
   simStatus: 'idle' | 'running' | 'paused' | null;
   sendMessage: (data: string) => void;
   sendCommand: (command: string, value?: string) => void;
-  sendPolicySwitch: (policy: 'webster' | 'rl' | 'fuzzy', intersectionId?: number | null) => void;
+  sendPolicySwitch: (policy: 'webster' | 'rl' | 'fuzzy' | 'type2_fuzzy', intersectionId?: number | null) => void;
   resetState: () => void;
 }
 
@@ -52,6 +53,7 @@ export function useWebSocket(url: string): UseWebSocketResult {
   const [metrics, setMetrics] = useState<any>(null);
   const [zoneMetrics, setZoneMetrics] = useState<any[]>([]);
   const [signals, setSignals] = useState<IntersectionSignalState[]>([]);
+  const [simTick, setSimTick] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [engineCity, setEngineCity] = useState<string | null>(null);
@@ -119,7 +121,8 @@ export function useWebSocket(url: string): UseWebSocketResult {
           // failure (unextended engine / no policy loaded) surfaces as an
           // engineError pill on the map so the toggle is never silent.
           if (data.type === 'policy_switched') {
-            if (data.ok && (data.mode === 'rl' || data.mode === 'ai' || data.mode === 'webster' || data.mode === 'fuzzy')) {
+            const knownModes = ['rl', 'ai', 'webster', 'fuzzy', 'type2_fuzzy'];
+            if (data.ok && knownModes.includes(data.mode)) {
               setEngineMode(data.mode);
             } else if (data.error) {
               setEngineError(data.error);
@@ -135,11 +138,13 @@ export function useWebSocket(url: string): UseWebSocketResult {
             setMetrics(data.metrics);
             setZoneMetrics(data.zone_metrics || []);
             setSignals(data.signals || []);
+            if (typeof data.tick === 'number') setSimTick(data.tick);
             if (data.city) setEngineCity(data.city);
             if (data.metrics.signal_mode === 'rl'
                 || data.metrics.signal_mode === 'ai'
                 || data.metrics.signal_mode === 'webster'
-                || data.metrics.signal_mode === 'fuzzy') {
+                || data.metrics.signal_mode === 'fuzzy'
+                || data.metrics.signal_mode === 'type2_fuzzy') {
               setEngineMode(data.metrics.signal_mode);
             }
           }
@@ -222,7 +227,7 @@ export function useWebSocket(url: string): UseWebSocketResult {
   // message shape {"type":"policy_switch","intersection_id":null,"policy":...}.
   // Network-wide by default; an intersection id is passed through unchanged for
   // when the engine grows per-intersection support (Phase 12).
-  const sendPolicySwitch = useCallback((policy: 'webster' | 'rl' | 'fuzzy', intersectionId?: number | null) => {
+  const sendPolicySwitch = useCallback((policy: 'webster' | 'rl' | 'fuzzy' | 'type2_fuzzy', intersectionId?: number | null) => {
     sendMessage(JSON.stringify({
       type: 'policy_switch',
       policy,
@@ -235,7 +240,8 @@ export function useWebSocket(url: string): UseWebSocketResult {
     setMetrics(null);
     setZoneMetrics([]);
     setEngineError(null);
+    setSimTick(null);
   }, []);
 
-  return { agents, metrics, zoneMetrics, signals, isConnected, isReconnecting, engineCity, engineError, engineMode, simStatus, sendMessage, sendCommand, sendPolicySwitch, resetState };
+  return { agents, metrics, zoneMetrics, signals, simTick, isConnected, isReconnecting, engineCity, engineError, engineMode, simStatus, sendMessage, sendCommand, sendPolicySwitch, resetState };
 }

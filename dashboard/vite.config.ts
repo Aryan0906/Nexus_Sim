@@ -76,15 +76,34 @@ export default defineConfig({
   plugins: [cityGraphsPlugin, dataPlugin, resultsPlugin, react()],
   server: {
     port: 3000,
+    // Bind IPv4 like the uvicorn sidecars (all 0.0.0.0). Vite's default
+    // "localhost" binds IPv6 ::1 only, which makes the dashboard unreachable
+    // via 127.0.0.1 and breaks clients that resolve localhost to IPv4 first.
+    host: '0.0.0.0',
     fs: { allow: [repoRoot] },
+    // HTTPS by default: serve TLS when certs are present (certs/ is generated
+    // by scripts/gen_certs.sh; override with SSL_CERT/SSL_KEY env vars).
+    // Resolve against the repo root (cwd is dashboard/ when run via npm).
+    https: (() => {
+      const cert = path.join(repoRoot, process.env.SSL_CERT || 'certs/server.crt')
+      const key = path.join(repoRoot, process.env.SSL_KEY || 'certs/server.key')
+      if (fs.existsSync(cert) && fs.existsSync(key)) {
+        console.log(`TLS enabled: ${cert}`)
+        return { key: fs.readFileSync(key), cert: fs.readFileSync(cert) }
+      }
+      console.log('WARNING: certs/server.{crt,key} not found; serving plain HTTP')
+      return undefined
+    })(),
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'https://localhost:8000',
         changeOrigin: true,
+        secure: false, // self-signed cert
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: 'wss://localhost:8000',
         ws: true,
+        secure: false, // self-signed cert
       },
     },
   },

@@ -38,7 +38,7 @@ interface PolicyTogglePanelProps {
   metrics: any;
   connected: boolean;
   simActive: boolean;
-  onSwitch: (policy: 'webster' | 'rl') => void;
+  onSwitch: (policy: 'webster' | 'rl' | 'fuzzy' | 'type2_fuzzy') => void;
 }
 
 const CITY_COLORS = ['#3b82f6', '#ef4444', '#eab308', '#22c55e', '#a855f7', '#22d3ee'];
@@ -103,7 +103,7 @@ export const PolicyTogglePanel: React.FC<PolicyTogglePanelProps> = ({
 
   // Toggle stores the metrics just before the switch ("before"), then samples
   // the running sim every 3 s while the learned policy is driving ("after").
-  const handleSwitch = (policy: 'webster' | 'rl') => {
+  const handleSwitch = (policy: 'webster' | 'rl' | 'fuzzy' | 'type2_fuzzy') => {
     setBefore(snapshotMetrics(metricsRef.current));
     setAfter(null);
     onSwitch(policy);
@@ -168,6 +168,8 @@ export const PolicyTogglePanel: React.FC<PolicyTogglePanelProps> = ({
   const modePill = (): { text: string; color: string; bg: string; border: string } => {
     if (!connected) return { text: 'Offline', color: '#9ca3af', bg: 'rgba(107,114,128,0.2)', border: '#4b5563' };
     if (rlActive) return { text: 'RL · learned control', color: '#c4b5fd', bg: 'rgba(139,92,246,0.2)', border: '#8b5cf6' };
+    if (mode === 'fuzzy') return { text: 'Fuzzy · Mamdani', color: '#86efac', bg: 'rgba(34,197,94,0.18)', border: '#22c55e' };
+    if (mode === 'type2_fuzzy') return { text: 'Type-2 Fuzzy · IT2', color: '#5eead4', bg: 'rgba(20,184,166,0.18)', border: '#14b8a6' };
     if (mode === 'webster') return { text: 'Webster · baseline', color: '#9ca3af', bg: 'rgba(107,114,128,0.2)', border: '#4b5563' };
     return { text: 'No signal data', color: '#9ca3af', bg: 'rgba(107,114,128,0.2)', border: '#4b5563' };
   };
@@ -313,7 +315,7 @@ export const PolicyTogglePanel: React.FC<PolicyTogglePanelProps> = ({
         </span>
       </div>
 
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '12px' }}>
         <button
           onClick={() => handleSwitch('webster')}
           disabled={!connected || !simActive}
@@ -329,6 +331,22 @@ export const PolicyTogglePanel: React.FC<PolicyTogglePanelProps> = ({
           title={!simActive ? 'Start a simulation to toggle the signal policy' : 'Switch the whole network to the learned RL policy'}
         >
           RL (AI) Control
+        </button>
+        <button
+          onClick={() => handleSwitch('fuzzy')}
+          disabled={!connected || !simActive}
+          style={{ ...toggleBtn(mode === 'fuzzy'), opacity: !connected || !simActive ? 0.5 : 1 }}
+          title={!simActive ? 'Start a simulation to toggle the signal policy' : 'Switch to Mamdani fuzzy green-extension control (queue + wait inputs)'}
+        >
+          Fuzzy (Mamdani)
+        </button>
+        <button
+          onClick={() => handleSwitch('type2_fuzzy')}
+          disabled={!connected || !simActive}
+          style={{ ...toggleBtn(mode === 'type2_fuzzy'), opacity: !connected || !simActive ? 0.5 : 1 }}
+          title={!simActive ? 'Start a simulation to toggle the signal policy' : 'Switch to interval type-2 fuzzy green-extension control'}
+        >
+          Type-2 Fuzzy
         </button>
       </div>
 

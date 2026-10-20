@@ -1,0 +1,16 @@
+$kind: http-request
+name: 'K42 - GET /api/algo/registry'
+order: 5100
+method: GET
+url: '{{gateway}}/api/algo/registry'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('K42 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('K42 - Returns array', () => {
+        pm.expect(pm.response.json()).to.be.an('array');
+      });

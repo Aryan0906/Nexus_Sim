@@ -409,6 +409,119 @@ def gw_create_scenario():
     return "404, base sim not found (acceptable)"
 
 
+# --------------------------------------------------------------- platform checks
+def _admin_headers():
+    login_data = {"username": "admin", "password": "admin"}
+    login_r = requests.post(base_for("gateway") + "/api/auth/login", data=login_data, timeout=8)
+    token = login_r.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def gw_platform_ttl():
+    r = requests.get(base_for("gateway") + "/api/platform/ttl", headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    d = r.json()
+    if d["ttl_seconds"] <= 0:
+        raise RuntimeError(f"invalid ttl: {d['ttl_seconds']}")
+    return f"200, ttl={d['ttl_seconds']}s"
+
+
+def gw_algo_registry_list():
+    r = requests.get(base_for("gateway") + "/api/algo/registry", headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    return f"200, registered={len(r.json())}"
+
+
+def gw_algo_register():
+    import uuid as _uuid
+    algo_id = f"api-check-{_uuid.uuid4().hex[:8]}"
+    data = {"algo_id": algo_id, "name": "API Check Algo", "discipline": "RL", "version": "1.0.0"}
+    r = requests.post(base_for("gateway") + "/api/algo/register", data=data, headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    d = r.json()
+    if d["algo"]["validation_status"] != "pending":
+        raise RuntimeError("expected pending validation")
+    return f"200, algo={algo_id}"
+
+
+def gw_algo_validate():
+    # Register then validate
+    import uuid as _uuid
+    algo_id = f"api-check-val-{_uuid.uuid4().hex[:8]}"
+    requests.post(base_for("gateway") + "/api/algo/register",
+                  data={"algo_id": algo_id, "name": "Val Algo", "discipline": "CV", "version": "1.0.0"},
+                  headers=_admin_headers(), timeout=8)
+    r = requests.post(base_for("gateway") + f"/api/algo/registry/{algo_id}/validate",
+                      data={"status": "validated"}, headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    if r.json()["validation_status"] != "validated":
+        raise RuntimeError("validation not updated")
+    return f"200, validated={algo_id}"
+
+
+def gw_emissions_single():
+    r = requests.post(base_for("gateway") + "/api/emissions",
+                      data={"agent_type": "car", "distance_km": "100", "idle_minutes": "10"},
+                      headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    if r.json()["co2_g"] <= 0:
+        raise RuntimeError("expected positive CO2")
+    return f"200, co2_g={r.json()['co2_g']}"
+
+
+def gw_emissions_aggregate():
+    body = {"agents": [
+        {"agent_type": "car", "distance_km": 50.0, "idle_minutes": 5.0},
+        {"agent_type": "ev", "distance_km": 50.0, "idle_minutes": 5.0},
+    ]}
+    r = requests.post(base_for("gateway") + "/api/emissions/aggregate", json=body, headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    if r.json()["total_agents"] != 2:
+        raise RuntimeError("expected 2 agents")
+    return f"200, total_co2_g={r.json()['total_co2_g']}"
+
+
+def gw_ingest_feeds():
+    r = requests.get(base_for("gateway") + "/api/ingest/feeds", headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    types = {f["feed_type"] for f in r.json()["feeds"]}
+    if not {"gtfs", "cv2x", "mqtt", "weather"}.issubset(types):
+        raise RuntimeError(f"missing feed types: {types}")
+    return f"200, feeds={sorted(types)}"
+
+
+def gw_ingest_gtfs():
+    body = {"vehicle_id": "V1", "route_id": "R1", "lat": 19.07, "lon": 72.87, "speed_kph": 25.0}
+    r = requests.post(base_for("gateway") + "/api/ingest/gtfs", json=body, headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    if r.json()["event"]["topic"] != "nlp.incident":
+        raise RuntimeError("expected nlp.incident topic")
+    return "200, topic=nlp.incident"
+
+
+def gw_ingest_weather():
+    body = {"city": "mumbai", "precip_mm": 10.0, "wind_kph": 50.0, "visibility_m": 1000}
+    r = requests.post(base_for("gateway") + "/api/ingest/weather", json=body, headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    if r.json()["event"]["payload"]["demand_multiplier"] >= 1.0:
+        raise RuntimeError("expected demand multiplier < 1")
+    return f"200, multiplier={r.json()['event']['payload']['demand_multiplier']}"
+
+
+def gw_rate_limit_stats():
+    r = requests.get(base_for("gateway") + "/api/platform/rate-limit", headers=_admin_headers(), timeout=8)
+    r.raise_for_status()
+    return "200, rate-limit stats ok"
+
+
+def gw_scenario_compare():
+    r = requests.get(base_for("gateway") + "/api/simulations/sim_nonexistent/compare/sc_nonexistent",
+                     headers=_admin_headers(), timeout=8)
+    if r.status_code != 404:
+        raise RuntimeError(f"expected 404, got {r.status_code}")
+    return "404, not found (acceptable)"
+
+
 # --------------------------------------------------------------- sidecar checks
 def sc_camera_health():
     r = requests.get(base_for("camera") + "/health", timeout=5)
@@ -542,6 +655,19 @@ if __name__ == "__main__":
     check("GW POST /api/simulations", gw_create_simulation)
     check("GW GET /api/simulations", gw_list_simulations)
     check("GW POST /api/scenarios", gw_create_scenario)
+
+    print("=== Platform Services ===")
+    check("GW GET /api/platform/ttl", gw_platform_ttl)
+    check("GW GET /api/algo/registry", gw_algo_registry_list)
+    check("GW POST /api/algo/register", gw_algo_register)
+    check("GW POST /api/algo/registry/{id}/validate", gw_algo_validate)
+    check("GW POST /api/emissions", gw_emissions_single)
+    check("GW POST /api/emissions/aggregate", gw_emissions_aggregate)
+    check("GW GET /api/ingest/feeds", gw_ingest_feeds)
+    check("GW POST /api/ingest/gtfs", gw_ingest_gtfs)
+    check("GW POST /api/ingest/weather", gw_ingest_weather)
+    check("GW GET /api/platform/rate-limit", gw_rate_limit_stats)
+    check("GW GET /api/simulations/{id}/compare/{scenario_id}", gw_scenario_compare)
 
     print("=== Sidecars (direct) ===")
     check("CAM :9003 /health", sc_camera_health)

@@ -1,0 +1,16 @@
+$kind: http-request
+name: 'K50 - GET /api/platform/rate-limit (admin)'
+order: 5900
+method: GET
+url: '{{gateway}}/api/platform/rate-limit'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('K50 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('K50 - Returns stats', () => {
+        pm.expect(pm.response.json()).to.have.property('tracked_requests');
+      });

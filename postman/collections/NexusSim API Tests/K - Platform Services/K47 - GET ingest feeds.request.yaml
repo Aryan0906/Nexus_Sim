@@ -1,0 +1,17 @@
+$kind: http-request
+name: 'K47 - GET /api/ingest/feeds'
+order: 5600
+method: GET
+url: '{{gateway}}/api/ingest/feeds'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('K47 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('K47 - Lists feed types', () => {
+        const types = pm.response.json().feeds.map(f => f.feed_type);
+        pm.expect(types).to.include.members(['gtfs', 'cv2x', 'mqtt', 'weather']);
+      });

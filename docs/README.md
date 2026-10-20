@@ -8,7 +8,7 @@ Welcome to the comprehensive documentation suite for **NexusSim** — a high-per
 
 - **[PRD — Product Requirements Document](PRD.md)**: Product vision, user goals, feature requirements, and success metrics.
 - **[TRD — Technical Requirements Document](TRD.md)**: Technical specifications, interface contracts, performance bounds, and subsystem architecture.
-- **[Team Implementation Plan](TEAM_IMPLEMENTATION_PLAN.md)**: Multi-phase engineering roadmap spanning foundation through 36-algorithm multi-subject tracks.
+- **[Team Implementation Plan](TEAM_IMPLEMENTATION_PLAN.md)**: Multi-phase engineering roadmap spanning foundation through the 48-algorithm (12 per subject) multi-subject tracks.
 - **[Tech Stack Specification](TECH_STACK.md)**: Detailed breakdown of languages, frameworks, runtime libraries, and sidecar architecture.
 - **[User Stories](USER_STORIES.md)**: Stakeholder user stories across city planners, traffic engineers, and academic researchers.
 - **[End-to-End Smoke Checklist](e2e_checklist.md)**: Integration test checklist run across pipeline, engine, sidecars, and dashboard.
@@ -27,10 +27,26 @@ Welcome to the comprehensive documentation suite for **NexusSim** — a high-per
 ## 3. Results, Benchmarks & Operational Memory
 
 - **[Master Results & Algorithm Matrix](results.md)**: Consolidated benchmarks, calibration ablations, multi-city MARL gains (+26.3% on Chicago), and the 48-algorithm portfolio matrix.
-- **[AI-Mode Stress Test Report](AI_STRESS_REPORT.md)**: Phase 8.8 stress-test report evaluating ONNX inference latency (p95 = 0.0808 ms) and FPS under 20,000 active agents.
+- **[AI-Mode Stress Test Report](AI_STRESS_REPORT.md)**: Phase 8.8 stress-test report evaluating ONNX inference latency (p95 = 0.04-0.13 ms measured by `bench_inference`) and tick throughput under 20,000 active agents (8.6-9.2 ms avg / 12-16 ms p95 after the P2 spatial-grid rewrite).
 - **[Project Backlog & Technical Debt](BACKLOG.md)**: Phase completion statuses (Phases 0–36) and prioritized active backlogs.
 - **[Cross-Session Memory Log](SESSION_MEMORY.md)**: Historical session log preserving context, checkpoints, architectural decisions, and run records across sessions.
 - **[Academic Synopsis Generation Context](SYNOPSIS_CONTEXT.md)**: Single source of truth containing verified system facts for project reports, DFDs, ER diagrams, and project guides.
+
+---
+
+## 5. Audit Evidence (2026-10)
+
+Reproducible artifacts for the integrity/optimization pass. Each file contains
+the commands, raw measurements, and explicit "not claimed" caveats.
+
+- **[P2 — 20k tick performance](evidence/p2_performance.md)**: uniform-grid + capsule rewrite; measured 8.6–9.2 ms avg / 12–16 ms p95 at 20,000 agents.
+- **[P3 — benchmark provenance](evidence/p3_benchmark_provenance.md)**: fabricated `mean_wait` values removed; catalog vs. measured labels added.
+- **[P4 — fuzzy policy wiring](evidence/p4_fuzzy_wiring.md)**: Mamdani/Type-2 policies now genuinely extend green; regression tests + 20k mode comparison.
+- **[P5 — dashboard & providers](evidence/p5_dashboard_and_providers.md)**: AlgoExplorer mounted, `tick` consumed, CUDA-training + provider selection verified.
+- **[P8 — ONNX provider](evidence/p8_onnx_provider.md)**: provider plumbing complete on CPU; CUDA EP experiment time-boxed and documented as unfinished.
+
+> Note: `docs/e2e_checklist.md` also carries an audit summary of the stale
+> test-binary trap (`ENABLE_TESTING=OFF`) and the fixtures affected.
 
 ---
 
@@ -38,3 +54,11 @@ Welcome to the comprehensive documentation suite for **NexusSim** — a high-per
 
 - **[Graph Schema](graph_schema.md)**: JSON structure defining nodes, edges, lanes, and traffic signal controller definitions.
 - **[OD Matrix Schema](od_matrix_schema.md)**: Origin-Destination matrix specification for real-world Socrata feeds and gravity-density proxy distributions.
+
+---
+
+## 6. API Verification (Postman + `api_check.py`)
+
+- **[Postman Collection](postman/)**: `NexusSim API Tests` collection covering Gateway (`:8000`), Virtual Camera (`:9003`), NLP Chat (`:9004`), Event Bus (`:9005`), Algo Explorer (`:9006`), Dashboard (`:3000`), Engine direct (`:9001`), and edge cases — 27 requests (A1–H27) with Postman test scripts.
+- **[API Verification Script](postman/api_check.py)**: standalone Python verifier (`requests` + raw-socket WS client) covering all 22 HTTP checks plus the 4 WebSocket cases Postman cannot run.
+- **[Test Log](TEST_LOG.md)**: Run history — Run 1 (21/24), Run 2 post-fix (24/24), Run 3 live `api_check.py` verification (24/24, 0 failures). WebSocket cases (A7, A8, D18, G24) are skipped by Postman and verified by `api_check.py` instead.

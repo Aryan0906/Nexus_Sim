@@ -1,0 +1,24 @@
+$kind: http-request
+name: 'J37 - GET /api/simulations/{id}'
+order: 4500
+method: GET
+url: '{{gateway}}/api/simulations/{{test_sim_id}}'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // If we don't have a sim id yet, skip
+      if (!pm.collectionVariables.get('test_sim_id')) {
+        pm.test('J37 - Skipped (no sim id)', () => { pm.expect(true).to.be.true; });
+        return;
+      }
+      pm.test('J37 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('J37 - Returns simulation details', () => {
+        const json = pm.response.json();
+        pm.expect(json).to.have.property('simulation_id');
+        pm.expect(json).to.have.property('status');
+        pm.expect(json).to.have.property('city_id');
+      });

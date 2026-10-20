@@ -6,22 +6,61 @@ Consolidates all internal backend microservices under a single entry point:
 - NLP Chat & Incident Service (Port 9004) -> /api/chat, /api/incident
 - Cross-Subject Event Bus (Port 9005)     -> /ws/events, /api/events/*
 - Algo Explorer Catalog (Port 9006)       -> /api/algo/*
+
+Additional platform services:
+- Authentication & JWT tokens               -> /api/auth/*
+- Multi-tenant workspaces                   -> /api/workspaces/*
+- Dynamic city onboarding                   -> /api/cities/*
+- Simulation-as-a-Service                   -> /api/simulations/*
+- What-if scenario engine                   -> /api/scenarios/*
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
+import shutil
+import subprocess
 import sys
-from typing import Any, Dict
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
+import yaml
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import StreamingResponse
 import ssl
 import websockets
+
+# Ensure the repo root is on sys.path so uvicorn can import "gateway.server"
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+# Add pipeline/src to path for import_osm module
+_PIPELINE_SRC = os.path.join(_REPO_ROOT, "pipeline", "src")
+if _PIPELINE_SRC not in sys.path:
+    sys.path.insert(0, _PIPELINE_SRC)
+
+# Import auth module
+from gateway.auth import (  # type: ignore
+    authenticate_user,
+    create_access_token,
+    get_current_user,
+    require_workspace_access,
+    require_role,
+    list_user_workspaces,
+    create_workspace,
+    WORKSPACES,
+    USERS,
+)
+
+# Import OSM import module (pipeline/src is already on sys.path above)
+from import_osm import import_osm  # type: ignore
 
 # Trust the local self-signed cert for ALL upstream connections (the
 # sidecars and engine serve TLS with certs/server.{crt,key}).
@@ -32,7 +71,7 @@ _SSL_CTX.verify_mode = ssl.CERT_NONE
 app = FastAPI(
     title="NexusSim Unified Backend Gateway",
     description="Single-port API Gateway routing to Engine, NLP, CV, Event Bus, and Algo Explorer services.",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 # Enable CORS for frontend dashboard (port 3000)
@@ -54,6 +93,541 @@ ALGO_HTTP_URL = os.environ.get("ALGO_HTTP_URL", "https://127.0.0.1:9006")
 
 GATEWAY_PORT = int(os.environ.get("GATEWAY_PORT", "8000"))
 
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(REPO_ROOT, "data")
+CITIES_YAML = os.path.join(REPO_ROOT, "pipeline", "cities.yaml")
+ENGINE_EXE = os.path.join(REPO_ROOT, "engine", "build", "engine.exe")
+
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# In-memory simulation & scenario registry (replace with DB in production)
+# ---------------------------------------------------------------------------
+
+SIMULATIONS: Dict[str, Dict[str, Any]] = {}
+SCENARIOS: Dict[str, Dict[str, Any]] = {}
+ENGINE_PROCESSES: Dict[str, subprocess.Popen] = {}
+
+
+# ---------------------------------------------------------------------------
+# Auth Endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/api/auth/login")
+async def login(username: str = Form(...), password: str = Form(...)) -> Dict[str, Any]:
+    """Authenticate user and return JWT access token."""
+    user = authenticate_user(username, password)
+    if not user:
+        raise HTTPException(
+            status_code=401, detail="Incorrect username or password"
+        )
+    token = create_access_token({"sub": user["username"], "role": user["role"]})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": user,
+        "workspaces": list_user_workspaces(user),
+    }
+
+
+@app.get("/api/auth/me")
+async def get_me(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Return current user info."""
+    return current_user
+
+
+# ---------------------------------------------------------------------------
+# Workspace Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/workspaces")
+async def list_workspaces(current_user: Dict[str, Any] = Depends(get_current_user)) -> List[Dict[str, Any]]:
+    """List workspaces accessible to the current user."""
+    return list_user_workspaces(current_user)
+
+
+@app.post("/api/workspaces")
+async def create_workspace_endpoint(
+    workspace_id: str = Form(...),
+    name: str = Form(...),
+    current_user: Dict[str, Any] = Depends(require_role(["admin"])),
+) -> Dict[str, Any]:
+    """Create a new workspace (admin only)."""
+    return create_workspace(workspace_id, name, current_user["username"])
+
+
+# ---------------------------------------------------------------------------
+# City Registry
+# ---------------------------------------------------------------------------
+
+def _load_cities_yaml() -> Dict[str, Any]:
+    if os.path.exists(CITIES_YAML):
+        with open(CITIES_YAML, "r") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def _save_cities_yaml(config: Dict[str, Any]) -> None:
+    with open(CITIES_YAML, "w") as f:
+        yaml.safe_dump(config, f, sort_keys=False)
+
+
+def _city_entry_from_yaml(city_id: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "city_id": city_id,
+        "city_name": city_id.replace("-", " ").title(),
+        "source": "config",
+        "chaos": cfg.get("chaos", 0.1),
+        "cv_bbox": cfg.get("cv_bbox"),
+        "od_source": (cfg.get("od_source") or {}).get("type", "unknown"),
+        "status": "ready",
+    }
+
+
+def _city_entry_from_data_dir(city_id: str) -> Optional[Dict[str, Any]]:
+    city_dir = os.path.join(DATA_DIR, city_id)
+    graph_json = os.path.join(city_dir, "graph.json")
+    if not os.path.isdir(city_dir) or not os.path.exists(graph_json):
+        return None
+
+    node_count = 0
+    edge_count = 0
+    try:
+        with open(graph_json, "r") as f:
+            graph = json.load(f)
+        node_count = len(graph.get("nodes", []))
+        edge_count = len(graph.get("edges", []))
+    except Exception:
+        pass
+
+    yaml_config = _load_cities_yaml()
+    yaml_entry = yaml_config.get(city_id, {})
+
+    return {
+        "city_id": city_id,
+        "city_name": city_id.replace("-", " ").title(),
+        "source": "upload",
+        "chaos": yaml_entry.get("chaos", 0.1),
+        "cv_bbox": yaml_entry.get("cv_bbox"),
+        "od_source": (yaml_entry.get("od_source") or {}).get("type", "uniform"),
+        "status": "ready",
+        "node_count": node_count,
+        "edge_count": edge_count,
+    }
+
+
+def list_cities() -> List[Dict[str, Any]]:
+    cities: Dict[str, Dict[str, Any]] = {}
+    yaml_config = _load_cities_yaml()
+    for city_id, cfg in yaml_config.items():
+        cities[city_id] = _city_entry_from_yaml(city_id, cfg)
+    if os.path.isdir(DATA_DIR):
+        for entry in os.listdir(DATA_DIR):
+            city_dir = os.path.join(DATA_DIR, entry)
+            if not os.path.isdir(city_dir):
+                continue
+            entry_data = _city_entry_from_data_dir(entry)
+            if entry_data:
+                cities[entry] = entry_data
+    return sorted(cities.values(), key=lambda c: c["city_id"])
+
+
+def get_city(city_id: str) -> Optional[Dict[str, Any]]:
+    for c in list_cities():
+        if c["city_id"] == city_id:
+            return c
+    return None
+
+
+@app.get("/api/cities", response_model=List[Dict[str, Any]])
+async def list_cities_endpoint() -> List[Dict[str, Any]]:
+    return list_cities()
+
+
+@app.get("/api/cities/{city_id}", response_model=Dict[str, Any])
+async def get_city_endpoint(city_id: str) -> Dict[str, Any]:
+    city = get_city(city_id)
+    if city is None:
+        raise HTTPException(status_code=404, detail=f"City '{city_id}' not found")
+    return city
+
+
+@app.post("/api/cities/upload", response_model=Dict[str, Any])
+async def upload_city(
+    file: UploadFile = File(...),
+    city_id: Optional[str] = Form(None),
+    city_name: Optional[str] = Form(None),
+) -> Dict[str, Any]:
+    import tempfile
+    import re as _re
+
+    filename = file.filename or "upload"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in {".osm", ".pbf", ".graphml"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file extension '{ext}'. Expected .osm, .osm.pbf, or .graphml",
+        )
+
+    if city_id is None:
+        city_id = _re.sub(r"[^a-z0-9]+", "-", filename.lower()).strip("-") or "city"
+
+    if ".." in city_id or "/" in city_id or "\\" in city_id:
+        raise HTTPException(status_code=400, detail="Invalid city_id")
+
+    city_dir = os.path.join(DATA_DIR, city_id)
+    os.makedirs(city_dir, exist_ok=True)
+
+    raw_filename = f"raw{ext}"
+    saved_path = os.path.join(city_dir, raw_filename)
+    try:
+        with open(saved_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    finally:
+        file.file.close()
+
+    try:
+        result = import_osm(
+            source_path=saved_path,
+            city_id=city_id,
+            city_name=city_name,
+            out_dir=city_dir,
+        )
+    except Exception as e:
+        if os.path.exists(city_dir):
+            shutil.rmtree(city_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
+
+    try:
+        yaml_config = _load_cities_yaml()
+        yaml_config[city_id] = {
+            "query": f"{city_name or city_id} (user upload)",
+            "chaos": 0.1,
+            "cv_bbox": result.get("bbox"),
+            "od_source": {"type": "uniform"},
+            "note": f"User-uploaded OSM: {filename}",
+        }
+        _save_cities_yaml(yaml_config)
+    except Exception:
+        pass
+
+    return {
+        "city_id": result["city_id"],
+        "city_name": result["city_name"],
+        "status": result["status"],
+        "node_count": result["node_count"],
+        "edge_count": result["edge_count"],
+        "bbox": result["bbox"],
+        "center": result["center"],
+        "message": f"City '{city_id}' imported successfully",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Simulation-as-a-Service
+# ---------------------------------------------------------------------------
+
+def _build_engine_args(city_id: str, config: Dict[str, Any]) -> List[str]:
+    args = [
+        "--city", city_id,
+        "--duration", str(config.get("duration_min", 60)),
+    ]
+    agent_count = config.get("agent_count", 500)
+    if agent_count > 0:
+        args += ["--agents", str(agent_count)]
+    od_path = config.get("od_path")
+    if od_path:
+        args += ["--od", od_path]
+    demand_scale = config.get("demand_scale")
+    if demand_scale is not None:
+        args += ["--demand-scale", str(demand_scale)]
+    start_hour = config.get("start_hour", 8.0)
+    args += ["--start-hour", str(start_hour)]
+    speed_factor = config.get("speed_factor", 0.55)
+    args += ["--speed-factor", str(speed_factor)]
+    route_spread = config.get("route_spread", 0.2)
+    args += ["--route-spread", str(route_spread)]
+    chaos = config.get("chaos", 0.1)
+    args += ["--chaos", str(chaos)]
+    signal_mode = config.get("signal_mode", "auto")
+    args += ["--signal-mode", signal_mode]
+    policy_path = config.get("policy_path")
+    if policy_path:
+        args += ["--policy", policy_path]
+    onnx_provider = config.get("onnx_provider", "auto")
+    args += ["--onnx-provider", onnx_provider]
+    if config.get("fast"):
+        args.append("--fast")
+    return args
+
+
+@app.post("/api/simulations", response_model=Dict[str, Any])
+async def create_simulation(
+    city_id: str = Form(...),
+    workspace_id: str = Form("ws_default"),
+    duration_min: int = Form(60),
+    agent_count: int = Form(500),
+    signal_mode: str = Form("auto"),
+    od_path: Optional[str] = Form(None),
+    demand_scale: Optional[float] = Form(None),
+    start_hour: float = Form(8.0),
+    speed_factor: float = Form(0.55),
+    route_spread: float = Form(0.2),
+    chaos: float = Form(0.1),
+    current_user: Dict[str, Any] = Depends(require_workspace_access("ws_default")),
+) -> Dict[str, Any]:
+    """Start a new simulation run (SaaS)."""
+    # Verify city exists
+    city = get_city(city_id)
+    if city is None:
+        raise HTTPException(status_code=404, detail=f"City '{city_id}' not found")
+
+    sim_id = f"sim_{uuid.uuid4().hex[:12]}"
+    sim_config = {
+        "city_id": city_id,
+        "workspace_id": workspace_id,
+        "duration_min": duration_min,
+        "agent_count": agent_count,
+        "signal_mode": signal_mode,
+        "od_path": od_path,
+        "demand_scale": demand_scale,
+        "start_hour": start_hour,
+        "speed_factor": speed_factor,
+        "route_spread": route_spread,
+        "chaos": chaos,
+        "user": current_user["username"],
+    }
+
+    engine_args = _build_engine_args(city_id, sim_config)
+
+    # Launch engine process
+    try:
+        proc = subprocess.Popen(
+            [ENGINE_EXE] + engine_args,
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Engine executable not found at {ENGINE_EXE}. Build first.",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start engine: {str(e)}")
+
+    ENGINE_PROCESSES[sim_id] = proc
+
+    now = datetime.now(timezone.utc).isoformat()
+    SIMULATIONS[sim_id] = {
+        "simulation_id": sim_id,
+        "workspace_id": workspace_id,
+        "city_id": city_id,
+        "status": "running",
+        "config": sim_config,
+        "created_at": now,
+        "started_at": now,
+        "completed_at": None,
+        "pid": proc.pid,
+        "kpi_snapshot": None,
+    }
+
+    return {
+        "simulation_id": sim_id,
+        "status": "running",
+        "city_id": city_id,
+        "pid": proc.pid,
+        "message": f"Simulation {sim_id} started for city {city_id}",
+    }
+
+
+@app.get("/api/simulations", response_model=List[Dict[str, Any]])
+async def list_simulations(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    """List simulations (filtered by workspace access)."""
+    user_workspaces = current_user["workspaces"]
+    result = []
+    for sim in SIMULATIONS.values():
+        if sim["workspace_id"] in user_workspaces or current_user["role"] == "admin":
+            entry = {k: sim[k] for k in sim if k != "pid"}
+            entry["pid"] = sim.get("pid")
+            result.append(entry)
+    return sorted(result, key=lambda s: s["created_at"], reverse=True)
+
+
+@app.get("/api/simulations/{sim_id}", response_model=Dict[str, Any])
+async def get_simulation(
+    sim_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    sim = SIMULATIONS.get(sim_id)
+    if sim is None:
+        raise HTTPException(status_code=404, detail=f"Simulation '{sim_id}' not found")
+    if sim["workspace_id"] not in current_user["workspaces"] and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Access denied to this simulation")
+
+    # Check if process is still running
+    proc = ENGINE_PROCESSES.get(sim_id)
+    if proc and sim["status"] == "running":
+        poll = proc.poll()
+        if poll is not None:
+            sim["status"] = "completed"
+            sim["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+    entry = {k: sim[k] for k in sim if k != "pid"}
+    entry["pid"] = sim.get("pid")
+    return entry
+
+
+@app.delete("/api/simulations/{sim_id}", response_model=Dict[str, str])
+async def delete_simulation(
+    sim_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, str]:
+    sim = SIMULATIONS.get(sim_id)
+    if sim is None:
+        raise HTTPException(status_code=404, detail=f"Simulation '{sim_id}' not found")
+    if sim["workspace_id"] not in current_user["workspaces"] and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Access denied to this simulation")
+
+    proc = ENGINE_PROCESSES.get(sim_id)
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    if sim_id in ENGINE_PROCESSES:
+        del ENGINE_PROCESSES[sim_id]
+    if sim_id in SIMULATIONS:
+        del SIMULATIONS[sim_id]
+
+    return {"status": "deleted", "simulation_id": sim_id}
+
+
+# ---------------------------------------------------------------------------
+# What-If Scenario Engine
+# ---------------------------------------------------------------------------
+
+@app.post("/api/scenarios", response_model=Dict[str, Any])
+async def create_scenario(
+    base_simulation_id: str = Form(...),
+    fork_tick: int = Form(0),
+    signal_mode: Optional[str] = Form(None),
+    incident_text: Optional[str] = Form(None),
+    incident_edge_id: Optional[str] = Form(None),
+    demand_scale: Optional[float] = Form(None),
+    current_user: Dict[str, Any] = Depends(require_workspace_access("ws_default")),
+) -> Dict[str, Any]:
+    """Create a what-if scenario by forking a base simulation."""
+    base = SIMULATIONS.get(base_simulation_id)
+    if base is None:
+        raise HTTPException(status_code=404, detail=f"Base simulation '{base_simulation_id}' not found")
+    if base["workspace_id"] not in current_user["workspaces"] and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Access denied to base simulation")
+
+    scenario_id = f"sc_{uuid.uuid4().hex[:12]}"
+
+    # Build mutated config from base
+    mutated_config = dict(base["config"])
+    if signal_mode is not None:
+        mutated_config["signal_mode"] = signal_mode
+    if demand_scale is not None:
+        mutated_config["demand_scale"] = demand_scale
+
+    scenario_config = {
+        **mutated_config,
+        "base_simulation_id": base_simulation_id,
+        "fork_tick": fork_tick,
+        "incident_text": incident_text,
+        "incident_edge_id": incident_edge_id,
+    }
+
+    engine_args = _build_engine_args(base["city_id"], scenario_config)
+    # Add scenario fork flag if engine supports it
+    engine_args += ["--scenario-id", scenario_id, "--fork-tick", str(fork_tick)]
+
+    try:
+        proc = subprocess.Popen(
+            [ENGINE_EXE] + engine_args,
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Engine executable not found at {ENGINE_EXE}. Build first.",
+        )
+
+    ENGINE_PROCESSES[scenario_id] = proc
+
+    now = datetime.now(timezone.utc).isoformat()
+    SCENARIOS[scenario_id] = {
+        "scenario_id": scenario_id,
+        "workspace_id": base["workspace_id"],
+        "base_simulation_id": base_simulation_id,
+        "fork_tick": fork_tick,
+        "mutations": {
+            "signal_mode": signal_mode,
+            "incident_text": incident_text,
+            "incident_edge_id": incident_edge_id,
+            "demand_scale": demand_scale,
+        },
+        "status": "running",
+        "config": scenario_config,
+        "created_at": now,
+        "started_at": now,
+        "completed_at": None,
+        "pid": proc.pid,
+        "comparison": None,
+    }
+
+    return {
+        "scenario_id": scenario_id,
+        "status": "running",
+        "base_simulation_id": base_simulation_id,
+        "message": f"Scenario {scenario_id} forked from {base_simulation_id}",
+    }
+
+
+@app.get("/api/scenarios", response_model=List[Dict[str, Any]])
+async def list_scenarios(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    user_workspaces = current_user["workspaces"]
+    result = []
+    for sc in SCENARIOS.values():
+        if sc["workspace_id"] in user_workspaces or current_user["role"] == "admin":
+            entry = {k: sc[k] for k in sc if k != "pid"}
+            entry["pid"] = sc.get("pid")
+            result.append(entry)
+    return sorted(result, key=lambda s: s["created_at"], reverse=True)
+
+
+@app.get("/api/scenarios/{scenario_id}", response_model=Dict[str, Any])
+async def get_scenario(
+    scenario_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    sc = SCENARIOS.get(scenario_id)
+    if sc is None:
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
+    if sc["workspace_id"] not in current_user["workspaces"] and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Access denied to this scenario")
+
+    entry = {k: sc[k] for k in sc if k != "pid"}
+    entry["pid"] = sc.get("pid")
+    return entry
+
 
 # ---------------------------------------------------------------------------
 # Health & Status Endpoint
@@ -63,7 +637,6 @@ GATEWAY_PORT = int(os.environ.get("GATEWAY_PORT", "8000"))
 @app.get("/health")
 @app.get("/api/health")
 async def gateway_health() -> Dict[str, Any]:
-    """Aggregated health status of the unified gateway and internal services."""
     services: Dict[str, Any] = {
         "gateway": {"status": "ok", "port": GATEWAY_PORT},
         "engine": {"url": ENGINE_WS_URL, "status": "configured"},
@@ -73,7 +646,6 @@ async def gateway_health() -> Dict[str, Any]:
         "algo_explorer": {"url": ALGO_HTTP_URL, "status": "unknown"},
     }
 
-    # Ping HTTP sidecars asynchronously
     async with httpx.AsyncClient(timeout=1.0, verify=False) as client:
         for name, base_url in [
             ("camera", CAMERA_HTTP_URL),
@@ -86,6 +658,14 @@ async def gateway_health() -> Dict[str, Any]:
                 services[name]["status"] = "healthy" if r.status_code == 200 else f"http_{r.status_code}"
             except Exception:
                 services[name]["status"] = "offline"
+
+    # Add simulation service health
+    services["simulation_service"] = {
+        "status": "ok",
+        "active_simulations": len([s for s in SIMULATIONS.values() if s["status"] == "running"]),
+        "total_simulations": len(SIMULATIONS),
+        "active_scenarios": len([s for s in SCENARIOS.values() if s["status"] == "running"]),
+    }
 
     return {
         "gateway": "NexusSim Unified Backend",
@@ -137,7 +717,6 @@ async def _proxy_http(request: Request, target_url: str) -> Response:
 # Service REST Routes
 # ---------------------------------------------------------------------------
 
-# 1. NLP Chat & Incident Service (port 9004)
 @app.api_route("/api/chat", methods=["GET", "POST", "OPTIONS"])
 @app.api_route("/chat", methods=["GET", "POST", "OPTIONS"])
 async def proxy_chat(request: Request) -> Response:
@@ -150,19 +729,16 @@ async def proxy_incident(request: Request) -> Response:
     return await _proxy_http(request, f"{NLP_HTTP_URL}/incident")
 
 
-# 2. Virtual Camera Service (port 9003)
 @app.api_route("/api/camera/{path:path}", methods=["GET", "POST", "OPTIONS"])
 async def proxy_camera(path: str, request: Request) -> Response:
     return await _proxy_http(request, f"{CAMERA_HTTP_URL}/api/camera/{path}")
 
 
-# 3. Cross-Subject Event Bus REST (port 9005)
 @app.api_route("/api/events/{path:path}", methods=["GET", "POST", "OPTIONS"])
 async def proxy_events_rest(path: str, request: Request) -> Response:
     return await _proxy_http(request, f"{EVENT_BUS_HTTP_URL}/{path}")
 
 
-# 4. Algo Explorer Service (port 9006)
 @app.api_route("/api/algo/{path:path}", methods=["GET", "OPTIONS"])
 async def proxy_algo(path: str, request: Request) -> Response:
     return await _proxy_http(request, f"{ALGO_HTTP_URL}/{path}")
@@ -179,7 +755,6 @@ async def proxy_algo_root(request: Request) -> Response:
 
 @app.websocket("/ws")
 async def proxy_engine_ws(client_ws: WebSocket) -> None:
-    """Bidirectional WebSocket proxy to C++ Simulation Engine (port 9001)."""
     await client_ws.accept()
     try:
         async with websockets.connect(ENGINE_WS_URL, max_size=10 * 1024 * 1024, ssl=_SSL_CTX) as server_ws:
@@ -215,7 +790,6 @@ async def proxy_engine_ws(client_ws: WebSocket) -> None:
 
 @app.websocket("/ws/events")
 async def proxy_event_bus_ws(client_ws: WebSocket) -> None:
-    """Bidirectional WebSocket proxy to Cross-Subject Event Bus (port 9005)."""
     await client_ws.accept()
     try:
         async with websockets.connect(EVENT_BUS_WS_URL, ssl=_SSL_CTX) as server_ws:
@@ -241,8 +815,6 @@ async def proxy_event_bus_ws(client_ws: WebSocket) -> None:
 
 def main():
     print(f"Starting NexusSim Unified Backend Gateway on port {GATEWAY_PORT}...")
-    # HTTPS by default: serve TLS when certs are present (certs/ is generated
-    # by scripts/gen_certs.sh; override with SSL_CERT/SSL_KEY env vars).
     ssl_cert = os.environ.get("SSL_CERT", "certs/server.crt")
     ssl_key = os.environ.get("SSL_KEY", "certs/server.key")
     ssl_kwargs = {}

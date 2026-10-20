@@ -1,0 +1,7 @@
+$kind: folder
+name: 'J - Auth & Simulation'
+order: 4000
+description: |-
+  Authentication, workspace management, simulation-as-a-service, and what-if
+  scenario endpoints. Requires JWT auth via /api/auth/login.
+  Test users: admin/admin, viewer/viewer.

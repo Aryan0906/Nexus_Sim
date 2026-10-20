@@ -15,7 +15,7 @@
 [![AI & ML](https://img.shields.io/badge/PyTorch_2.4-CUDA_12.4-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](ml/)
 [![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-0.04--0.13ms_p95_measured-005CED?style=for-the-badge&logo=onnx&logoColor=white)](engine/src/ai/)
 [![Docker Ready](https://img.shields.io/badge/Docker-Compose_Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](docker-compose.yml)
-[![Tests Passing](https://img.shields.io/badge/Tests-183%2F183_Passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
+[![Tests Passing](https://img.shields.io/badge/Tests-199%2F200_Passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
 
 <br/>
 
@@ -293,11 +293,12 @@ See `docs/TEST_LOG.md` for the full run history (Run 1: 21/24 → Run 2: 24/24 p
 ```text
 ======================= TEST EXECUTION SUMMARY =======================
   ✔ C++ Engine Suite (CTest)     :  56 / 56  passing
-  ✔ ML & Cross-Subject E2E Suite :  84 / 84  passing
+  ✔ ML & Cross-Subject E2E Suite :  80 / 81  passing (1 skipped)
   ✔ Data Pipeline Pytest Suite   :  35 / 35  passing
   ✔ Dashboard Vitest Suite       :   8 / 8   passing
+  ✔ API Verification (api_check.py): 24 / 24  passing
   --------------------------------------------------------------------
-  TOTAL                          : 183 / 183 PASSING (100% GREEN)
+  TOTAL                          : 199 / 200 collected (1 skipped)
 ======================================================================
 ```
 

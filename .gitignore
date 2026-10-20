@@ -67,6 +67,9 @@ cmake_config.txt
 # Postman app local metadata (never commit)
 .postman/
 
+# Generated API verification results
+postman/results/
+
 # Documents & Presentations
 *.pdf
 *.pptx

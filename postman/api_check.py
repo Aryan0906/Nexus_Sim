@@ -11,20 +11,41 @@ import struct
 import base64
 import os
 import time
+from datetime import datetime, timezone
 
 import requests
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Trust the local self-signed cert for every HTTPS request.
+# Base URLs match what the running services actually serve (HTTPS with
+# self-signed certs, verify=False). Postman collection variables use
+# http://localhost:* — keep both in sync if you repoint services.
+BASE_URLS = {
+    "gateway": os.environ.get("NEXUSSIM_GATEWAY_URL", "https://127.0.0.1:8000"),
+    "camera": os.environ.get("NEXUSSIM_CAMERA_URL", "https://127.0.0.1:9003"),
+    "nlp": os.environ.get("NEXUSSIM_NLP_URL", "https://127.0.0.1:9004"),
+    "event_bus": os.environ.get("NEXUSSIM_EVENT_BUS_URL", "https://127.0.0.1:9005"),
+    "algo": os.environ.get("NEXUSSIM_ALGO_URL", "https://127.0.0.1:9006"),
+    "dashboard": os.environ.get("NEXUSSIM_DASHBOARD_URL", "https://127.0.0.1:3000"),
+    "engine_ws": os.environ.get("NEXUSSIM_ENGINE_WS_URL", "wss://127.0.0.1:9001"),
+}
+
+
+def base_for(name):
+    return BASE_URLS[name]
+
+
+# Trust the local self-signed cert for every HTTPS request (https fallback).
 _orig_request = requests.Session.request
 def _patched_request(self, method, url, **kwargs):
-    kwargs.setdefault("verify", False)
+    if url.startswith("https://"):
+        kwargs.setdefault("verify", False)
     return _orig_request(self, method, url, **kwargs)
 requests.Session.request = _patched_request
 
 RESULTS = []
+RUN_STARTED_AT = datetime.now(timezone.utc).isoformat()
 
 
 def check(name, fn):
@@ -138,7 +159,7 @@ def ws_wait_for(s, pred, max_frames=400):
 
 # ------------------------------------------------------------------- GW checks
 def gw_health():
-    r = requests.get("https://127.0.0.1:8000/api/health", timeout=8)
+    r = requests.get(base_for("gateway") + "/api/health", timeout=8)
     r.raise_for_status()
     d = r.json()
     svcs = d["services"]
@@ -150,13 +171,13 @@ def gw_health():
 
 
 def gw_root():
-    r = requests.get("https://127.0.0.1:8000/", timeout=8)
+    r = requests.get(base_for("gateway") + "/", timeout=8)
     r.raise_for_status()
     return f"200, bytes={len(r.content)}"
 
 
 def gw_chat():
-    r = requests.post("https://127.0.0.1:8000/api/chat",
+    r = requests.post(base_for("gateway") + "/api/chat",
                       json={"query": "what is the average wait time", "city": "chicago"}, timeout=15)
     r.raise_for_status()
     keys = sorted(r.json().keys())
@@ -164,21 +185,21 @@ def gw_chat():
 
 
 def gw_incident():
-    r = requests.post("https://127.0.0.1:8000/api/incident",
+    r = requests.post(base_for("gateway") + "/api/incident",
                       json={"text": "accident on main street"}, timeout=15)
     r.raise_for_status()
     return f"200, keys={sorted(r.json().keys())}"
 
 
 def gw_camera_feed():
-    r = requests.get("https://127.0.0.1:8000/api/camera/feed", timeout=15)
+    r = requests.get(base_for("gateway") + "/api/camera/feed", timeout=15)
     r.raise_for_status()
     ct = r.headers.get("content-type", "")
     return f"200, content-type={ct}, bytes={len(r.content)}"
 
 
 def gw_algo():
-    r = requests.get("https://127.0.0.1:8000/api/algo", timeout=8)
+    r = requests.get(base_for("gateway") + "/api/algo", timeout=8)
     r.raise_for_status()
     d = r.json()
     n = len(d.get("algorithms", d)) if isinstance(d, dict) else len(d)
@@ -187,14 +208,14 @@ def gw_algo():
 
 def gw_events_rest():
     # Gateway route is /api/events/{path}; publish is POST-only on the bus.
-    r = requests.post("https://127.0.0.1:8000/api/events/publish/cv.anomaly",
+    r = requests.post(base_for("gateway") + "/api/events/publish/cv.anomaly",
                       json={"message": "api check", "severity": "low"}, timeout=8)
     r.raise_for_status()
     return f"200, keys={sorted(r.json().keys())}"
 
 
 def gw_ws_engine():
-    s = ws_connect("wss://127.0.0.1:8000/ws")
+    s = ws_connect(base_for("gateway").replace("http", "ws") + "/ws")
     try:
         ws_send_text(s, json.dumps({"type": "city", "city": "chicago"}))
         frame = ws_wait_for(s, lambda d: "agents" in d)
@@ -204,7 +225,7 @@ def gw_ws_engine():
 
 
 def gw_ws_events():
-    s = ws_connect("wss://127.0.0.1:8000/ws/events", timeout=8)
+    s = ws_connect(base_for("gateway").replace("http", "ws") + "/ws/events", timeout=8)
     try:
         # send a probe and expect at least one frame or a clean close
         ws_send_text(s, json.dumps({"type": "subscribe", "topic": "test"}))
@@ -220,71 +241,71 @@ def gw_ws_events():
 
 # --------------------------------------------------------------- sidecar checks
 def sc_camera_health():
-    r = requests.get("https://127.0.0.1:9003/health", timeout=5)
+    r = requests.get(base_for("camera") + "/health", timeout=5)
     r.raise_for_status()
     return f"200 {r.json()}"
 
 
 def sc_camera_feed():
-    r = requests.get("https://127.0.0.1:9003/api/camera/feed", timeout=10)
+    r = requests.get(base_for("camera") + "/api/camera/feed", timeout=10)
     r.raise_for_status()
     return f"200, content-type={r.headers.get('content-type')}, bytes={len(r.content)}"
 
 
 def sc_nlp_health():
-    r = requests.get("https://127.0.0.1:9004/health", timeout=5)
+    r = requests.get(base_for("nlp") + "/health", timeout=5)
     r.raise_for_status()
     return f"200 {r.json()}"
 
 
 def sc_nlp_chat():
-    r = requests.post("https://127.0.0.1:9004/chat",
+    r = requests.post(base_for("nlp") + "/chat",
                       json={"query": "what is the average wait time", "city": "chicago"}, timeout=10)
     r.raise_for_status()
     return f"200, keys={sorted(r.json().keys())}"
 
 
 def sc_nlp_incident():
-    r = requests.post("https://127.0.0.1:9004/incident",
+    r = requests.post(base_for("nlp") + "/incident",
                       json={"text": "road closed at 5th avenue"}, timeout=10)
     r.raise_for_status()
     return f"200, keys={sorted(r.json().keys())}"
 
 
 def sc_nlp_feedback():
-    r = requests.post("https://127.0.0.1:9004/feedback",
+    r = requests.post(base_for("nlp") + "/feedback",
                       json={"text": "the simulation is great"}, timeout=10)
     r.raise_for_status()
     return f"200, keys={sorted(r.json().keys())}"
 
 
 def sc_eventbus_health():
-    r = requests.get("https://127.0.0.1:9005/health", timeout=5)
+    r = requests.get(base_for("event_bus") + "/health", timeout=5)
     r.raise_for_status()
     return f"200 {r.json()}"
 
 
 def sc_eventbus_events():
-    r = requests.get("https://127.0.0.1:9005/events", timeout=5)
+    r = requests.get(base_for("event_bus") + "/events", timeout=5)
     r.raise_for_status()
     return f"200, bytes={len(r.content)}"
 
 
 def sc_eventbus_publish():
-    r = requests.post("https://127.0.0.1:9005/publish/cv.anomaly",
+    r = requests.post(base_for("event_bus") + "/publish/cv.anomaly",
                       json={"message": "test anomaly", "severity": "low"}, timeout=5)
     r.raise_for_status()
     return f"200, keys={sorted(r.json().keys())}"
 
 
 def sc_algo_health():
-    r = requests.get("https://127.0.0.1:9006/health", timeout=5)
+    r = requests.get(base_for("algo") + "/health", timeout=5)
     r.raise_for_status()
     return f"200 {r.json()}"
 
 
 def sc_algo_algorithms():
-    r = requests.get("https://127.0.0.1:9006/algorithms", timeout=5)
+    r = requests.get(base_for("algo") + "/algorithms", timeout=5)
     r.raise_for_status()
     d = r.json()
     n = len(d) if isinstance(d, list) else len(d.get("algorithms", []))
@@ -292,31 +313,31 @@ def sc_algo_algorithms():
 
 
 def sc_algo_toggle():
-    r = requests.post("https://127.0.0.1:9006/algorithms/toggle",
+    r = requests.post(base_for("algo") + "/algorithms/toggle",
                       json={"algo_id": "CV-1", "active": False}, timeout=5)
     r.raise_for_status()
     # restore so repeated runs stay green
-    requests.post("https://127.0.0.1:9006/algorithms/toggle",
+    requests.post(base_for("algo") + "/algorithms/toggle",
                   json={"algo_id": "CV-1", "active": True}, timeout=5)
     return f"200, keys={sorted(r.json().keys())}"
 
 
 def dash_root():
-    r = requests.get("https://127.0.0.1:3000/", timeout=8)
+    r = requests.get(base_for("dashboard") + "/", timeout=8)
     r.raise_for_status()
     has_root = 'id="root"' in r.text or "root" in r.text
     return f"200, bytes={len(r.content)}, root_div={has_root}"
 
 
 def dash_static():
-    r = requests.get("https://127.0.0.1:3000/data/36_algo_matrix.json", timeout=8)
+    r = requests.get(base_for("dashboard") + "/data/36_algo_matrix.json", timeout=8)
     r.raise_for_status()
     d = r.json()
     return f"200, total_algorithms={d.get('total_algorithms')}"
 
 
 def engine_direct_ws():
-    s = ws_connect("wss://127.0.0.1:9001")
+    s = ws_connect(base_for("engine_ws"))
     try:
         ws_send_text(s, json.dumps({"type": "city", "city": "chicago"}))
         frame = ws_wait_for(s, lambda d: "agents" in d)
@@ -366,5 +387,50 @@ if __name__ == "__main__":
         for n in failed:
             print(f"  - {n}")
 
+    # ---- results export -------------------------------------------------
+    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results")
+    os.makedirs(results_dir, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    base_name = f"api_check-{stamp}"
+
+    json_payload = {
+        "ran_at": RUN_STARTED_AT,
+        "base_urls": BASE_URLS,
+        "total": len(RESULTS),
+        "passed": passed,
+        "failed": len(failed),
+        "results": [
+            {"name": name, "passed": ok, "detail": detail}
+            for name, ok, detail in RESULTS
+        ],
+    }
+    json_path = os.path.join(results_dir, base_name + ".json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(json_payload, f, indent=2)
+
+    md_lines = [
+        f"# NexusSim API Check — {stamp}",
+        "",
+        f"- **Ran at (UTC):** {RUN_STARTED_AT}",
+        f"- **Result:** {passed} / {len(RESULTS)} passed",
+        f"- **Failures:** {len(failed)}",
+        "",
+        "## Base URLs",
+        "",
+    ]
+    for name, url in BASE_URLS.items():
+        md_lines.append(f"- **{name}:** {url}")
+    md_lines += ["", "## Results", "", "| Name | Passed | Detail |", "|------|--------|--------|"]
+    for name, ok, detail in RESULTS:
+        md_lines.append(f"| {name} | {'✅' if ok else '❌'} | {detail} |")
+    if failed:
+        md_lines += ["", "### Failures", ""]
+        for n in failed:
+            md_lines.append(f"- {n}")
+    md_path = os.path.join(results_dir, base_name + ".md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(md_lines))
+
+    print(f"\nResults exported: {json_path} and {md_path}")
 
 

@@ -96,7 +96,7 @@ phases is given per row.
 | TR-ENG-02 | Load a city graph from `graph.json` per [5]; expose adjacency list, node/edge structs, per-node `zone_id`, per-edge lanes/length | DONE | FR-1, FR-6 | Ph 1 |
 | TR-ENG-03 | Spawn and move heterogeneous agents (car, bus, auto-rickshaw, two-wheeler, pedestrian) with per-type IDM parameters; chaos coefficient scales lane discipline from config | DONE | FR-1 | Ph 2 |
 | TR-ENG-04 | Route via A* with optional stochastic diversity (`compute_path_stochastic`) | DONE | FR-2 | Ph 2 |
-| TR-ENG-05 | Quadtree spatial index rebuilt each tick; agents query leading/lateral neighbours via radius query (no O(N²)) | DONE | NFR-3 | Ph 3 |
+| TR-ENG-05 | Counting-sort uniform grid rebuilt each tick; agents query leading neighbours via an oriented capsule query (no O(N²)) | DONE | NFR-3 | Ph 3 |
 | TR-ENG-06 | Structure-of-Arrays (SoA) agent storage, `alignas(64)`, parallel agent updates via `std::async` chunking over CPU cores | DONE | NFR-1/2 | Ph 2–3 |
 | TR-ENG-07 | OD-driven spawning from `od_matrix.json` at correct time-of-day rate; graceful random fallback when no OD present | DONE | FR-1 | Ph 6 |
 | TR-ENG-08 | Fixed-cycle signals via Webster's formula computed once at startup; agents queue at red | DONE | — | Ph 5 |
@@ -226,7 +226,7 @@ Origin–destination demand keyed by zone pair with hourly rates. `socrata` matr
 |----|-------------|-------------------|-----------------|
 | NFR-1 | Long-run stability at scale | ≥ 20,000 agents, no crash over extended runs | `engine/tests/test_stress.cpp` (20k agents, 500 ticks) |
 | NFR-2 | Throughput | 60 fps at 20k agents on mid-range dev machine; `avg_tick_ms`/`p95_tick_ms` logged | Ph 3.7; `Simulation::avg_tick_ms()` |
-| NFR-3 | Spatial index | Quadtree ≥ 10× faster than naive O(N²) at 10k agents | `engine/bench/bench_quadtree.cpp` |
+| NFR-3 | Spatial index | Indexed proximity search ≥ 10× faster than naive O(N²) at 10k agents | `engine/bench/bench_quadtree.cpp` |
 | NFR-4 | Inference latency | p95 ≤ 8 ms per decision tick; never blocks the real-time loop | Ph 8.6; `bench_inference.cpp` |
 | NFR-5 | Protocol extensibility | New broadcast fields additive; existing dashboard consumers unaffected | `useWebSocket.ts` ignores unknown keys (verified) |
 | NFR-6 | Data-source compliance | All external sources ToS-compliant; no scripted Google Maps live-traffic scraping | Ph 14.2 module docstring; BR-6 |

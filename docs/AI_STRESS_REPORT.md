@@ -25,6 +25,36 @@ and drop **< 5 fps vs. baseline mode** at 20,000 agents over a 10-minute run.
 Inference micro-benchmark (`bench_inference`, 1,000 calls): batch 64 p95 = **0.018 ms**,
 batch 256 p95 = **0.027 ms** — roughly 300x inside the 8 ms budget.
 
+---
+
+## 2026-10 Addendum — Post-Optimization Re-Measurement
+
+The Phase 8.8 numbers above were taken before the P2 spatial-grid rewrite and
+before the fuzzy policies were actually wired into signal timing. Re-measured
+on the same machine with the rebuilt engine (`engine/build/engine.exe`,
+`--city piedmont --agents 20000 --duration 1 --fast --no-ws --profile`):
+
+| Mode | Avg tick | p50 | p95 | p99 | Max | `signals` phase |
+|---|---:|---:|---:|---:|---:|---:|
+| `webster` (baseline) | 9.22 ms | 8.52 ms | 16 ms | 28 ms | 46 ms | 0.002 ms |
+| `fuzzy` | 9.65 ms | 9.10 ms | 12 ms | 20 ms | 47 ms | 0.080 ms |
+| `type2_fuzzy` | 11.50 ms | 12 ms | 16 ms | 28 ms | 72 ms | 0.082 ms |
+| `rl` (fixture ONNX policy) | 12.26 ms | 12 ms | 20 ms | 32 ms | 58 ms | 0.024 ms |
+
+Headline gate (P2: avg ≤ 16.7 ms, p95 ≤ 25 ms): **PASS in every mode**.
+Pacing is ~85–110 ticks/s (not 60 FPS): the `dt = 0.1 s` simulation runs at
+roughly 8–10× real time in `--fast` headless mode.
+
+ONNX inference p95 re-measured at batch 64: **0.040–0.133 ms** over five idle
+runs (the earlier `0.018`/`0.027` figures were best-case single runs).
+
+Evidence and reproduction commands: `docs/evidence/p2_performance.md`,
+`docs/evidence/p4_fuzzy_wiring.md`.
+
+> Caveat: the higher `signals` cost for fuzzy modes is the real fuzzy inference
+> executing per intersection — it is not free, but it is bounded and stays well
+> inside the tick budget at 20,000 agents.
+
 ## Interpretation
 
 - **Computational overhead passes the gate.** With a policy whose actions are

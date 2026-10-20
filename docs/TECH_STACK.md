@@ -33,7 +33,7 @@ NexusSim is a three-subsystem project. Each subsystem has a hard interface bound
 | Language | C++20 | Performance, deterministic memory control, native thread primitives |
 | Build system | CMake 3.25+ | Standard for cross-platform C++ projects; easy CI integration |
 | Graph structure | Custom adjacency list | Road networks are sparse directed graphs; adjacency list is cache-friendlier than matrix |
-| Spatial index | 2D Quadtree (custom) | Reduces collision/proximity detection from O(N²) to O(N log N) |
+| Spatial index | Counting-sort uniform grid (custom) | Reduces proximity queries from O(N²) to O(N); quadtree retained for benchmark comparison |
 | Memory layout | Structure-of-Arrays (SoA) | Better CPU cache utilisation for bulk agent updates vs. AoS |
 | Concurrency | `std::thread` + thread pool | Parallel agent update ticks; no external dependency |
 | IPC to ML backend | Shared-memory ring buffer (POSIX) | Zero-copy, non-blocking; engine never stalls waiting for ML reply |
@@ -159,7 +159,7 @@ nexussim/
 │   ├── src/
 │   │   ├── graph/           # Graph loading, adjacency list
 │   │   ├── agents/          # Agent types, IDM behaviour
-│   │   ├── spatial/         # Quadtree implementation
+│   │   ├── spatial/         # Uniform grid + historical quadtree
 │   │   ├── inference/       # ONNX Runtime wrapper
 │   │   ├── server/          # uWebSockets stream server
 │   │   └── main.cpp

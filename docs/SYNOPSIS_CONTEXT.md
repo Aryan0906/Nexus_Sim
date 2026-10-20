@@ -36,7 +36,8 @@ AI-Driven Signal Control and Equity Analysis**
   wait-time inequality per zone.
 - An integrated 4-subject academic project: Reinforcement Learning, Soft
   Computing, Computer Vision, and Natural Language Processing (all four subjects
-  are fully implemented with a complete 36-algorithm portfolio, event bus, and
+  are fully implemented with a complete 48-algorithm portfolio (12 per subject),
+  event bus, and
   interactive explorer).
 
 ---

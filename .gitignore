@@ -1,6 +1,11 @@
+# TLS certificates (private keys must never be committed)
+certs/
+
 # Build outputs
 build/
+build_*/
 engine/build/
+engine/build_cuda/
 engine.exe
 
 # Dependencies
@@ -58,6 +63,9 @@ build_*.txt
 *_log.txt
 *_err.txt
 cmake_config.txt
+
+# Postman app local metadata (never commit)
+.postman/
 
 # Documents & Presentations
 *.pdf

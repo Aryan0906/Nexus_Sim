@@ -23,6 +23,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -61,6 +62,17 @@ from gateway.auth import (  # type: ignore
 
 # Import OSM import module (pipeline/src is already on sys.path above)
 from import_osm import import_osm  # type: ignore
+
+# Import platform services (algorithm registry, rate limiting, emissions, ingestion)
+from gateway.platform_services import (  # type: ignore
+    RegisteredAlgorithm,
+    algorithm_registry,
+    rate_limiter,
+    compute_emissions,
+    aggregate_emissions,
+    realtime_ingestion,
+    compare_kpis,
+)
 
 # Trust the local self-signed cert for ALL upstream connections (the
 # sidecars and engine serve TLS with certs/server.{crt,key}).
@@ -627,6 +639,268 @@ async def get_scenario(
     entry = {k: sc[k] for k in sc if k != "pid"}
     entry["pid"] = sc.get("pid")
     return entry
+
+
+# ---------------------------------------------------------------------------
+# Platform Services (algorithm registry, rate limiting, emissions, ingestion)
+# ---------------------------------------------------------------------------
+
+# Ephemeral simulation TTL (seconds). Engine processes and registry entries
+# older than this are garbage-collected by the background task below.
+SIMULATION_TTL_SECONDS = int(os.environ.get("NEXUSSIM_SIM_TTL_SECONDS", "86400"))
+TTL_CHECK_INTERVAL_SECONDS = int(os.environ.get("NEXUSSIM_TTL_INTERVAL_SECONDS", "60"))
+
+
+async def _garbage_collect_expired() -> None:
+    """Background task: terminate engine processes and drop registry entries
+    older than SIMULATION_TTL_SECONDS. Prevents resource leaks from abandoned runs."""
+    while True:
+        try:
+            now = time.time()
+            expired = []
+            for sim_id, sim in list(SIMULATIONS.items()):
+                started = sim.get("started_at")
+                if not started:
+                    continue
+                try:
+                    started_ts = datetime.fromisoformat(started).timestamp()
+                except ValueError:
+                    started_ts = now
+                if now - started_ts > SIMULATION_TTL_SECONDS:
+                    expired.append(sim_id)
+
+            for sim_id in expired:
+                proc = ENGINE_PROCESSES.get(sim_id)
+                if proc and proc.poll() is None:
+                    try:
+                        proc.terminate()
+                        proc.wait(timeout=3)
+                    except Exception:
+                        proc.kill()
+                SIMULATIONS.pop(sim_id, None)
+                ENGINE_PROCESSES.pop(sim_id, None)
+        except Exception as e:
+            print(f"[TTL GC] error: {e}")
+        await asyncio.sleep(TTL_CHECK_INTERVAL_SECONDS)
+
+
+@app.on_event("startup")
+async def _startup_gc() -> None:
+    asyncio.create_task(_garbage_collect_expired())
+
+
+@app.get("/api/platform/ttl")
+async def get_ttl_config(current_user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Return the TTL configuration and GC stats."""
+    return {
+        "ttl_seconds": SIMULATION_TTL_SECONDS,
+        "ttl_interval_seconds": TTL_CHECK_INTERVAL_SECONDS,
+        "active_simulations": len(SIMULATIONS),
+        "active_scenarios": len(SCENARIOS),
+        "active_engine_processes": len(ENGINE_PROCESSES),
+    }
+
+
+# ---- Scenario comparison --------------------------------------------------
+
+@app.get("/api/simulations/{sim_id}/compare/{scenario_id}")
+async def compare_simulation_scenario(
+    sim_id: str,
+    scenario_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Compare a baseline simulation against a forked scenario (KPI diff)."""
+    base = SIMULATIONS.get(sim_id)
+    sc = SCENARIOS.get(scenario_id)
+    if base is None:
+        raise HTTPException(status_code=404, detail=f"Simulation '{sim_id}' not found")
+    if sc is None:
+        raise HTTPException(status_code=404, detail=f"Scenario '{scenario_id}' not found")
+    if base["workspace_id"] not in current_user["workspaces"] and current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    baseline_kpis = base.get("kpi_snapshot") or {}
+    scenario_kpis = sc.get("kpi_snapshot") or {}
+    comparison = compare_kpis(baseline_kpis, scenario_kpis)
+
+    # Persist comparison on the scenario for later retrieval
+    sc["comparison"] = comparison
+    return {
+        "simulation_id": sim_id,
+        "scenario_id": scenario_id,
+        "comparison": comparison,
+        "note": "KPI snapshots are recorded when a simulation completes; empty if still running.",
+    }
+
+
+# ---- Algorithm Registry ---------------------------------------------------
+
+@app.get("/api/algo/registry")
+async def list_registered_algorithms(
+    discipline: Optional[str] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    """List marketplace-registered algorithms (in addition to the 48 built-ins)."""
+    return algorithm_registry.list(discipline)
+
+
+@app.post("/api/algo/register")
+async def register_algorithm(
+    algo_id: str = Form(...),
+    name: str = Form(...),
+    discipline: str = Form(...),
+    version: str = Form(...),
+    onnx_path: Optional[str] = Form(None),
+    sidecar_url: Optional[str] = Form(None),
+    author: Optional[str] = Form(None),
+    current_user: Dict[str, Any] = Depends(require_role(["admin", "editor"])),
+) -> Dict[str, Any]:
+    """Register a new marketplace algorithm (versioned ONNX + sidecar)."""
+    discipline = discipline.upper()
+    if discipline not in ("CV", "SC", "NLP", "RL"):
+        raise HTTPException(status_code=400, detail="discipline must be one of CV, SC, NLP, RL")
+    existing = algorithm_registry.get(algo_id)
+    if existing and existing.version == version:
+        raise HTTPException(status_code=409, detail=f"Algorithm '{algo_id}' v{version} already registered")
+    algo = RegisteredAlgorithm(
+        algo_id=algo_id,
+        name=name,
+        discipline=discipline,
+        version=version,
+        onnx_path=onnx_path,
+        sidecar_url=sidecar_url,
+        author=author or current_user["username"],
+        validation_status="pending",
+    )
+    algorithm_registry.register(algo)
+    return {"status": "registered", "algo": algo.to_dict()}
+
+
+@app.get("/api/algo/registry/{algo_id}")
+async def get_registered_algorithm(
+    algo_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    algo = algorithm_registry.get(algo_id)
+    if algo is None:
+        raise HTTPException(status_code=404, detail=f"Algorithm '{algo_id}' not registered")
+    return algo.to_dict()
+
+
+@app.post("/api/algo/registry/{algo_id}/validate")
+async def validate_registered_algorithm(
+    algo_id: str,
+    status: str = Form(...),
+    current_user: Dict[str, Any] = Depends(require_role(["admin"])),
+) -> Dict[str, Any]:
+    if status not in ("pending", "validated", "rejected"):
+        raise HTTPException(status_code=400, detail="status must be pending, validated, or rejected")
+    if not algorithm_registry.set_validation(algo_id, status):
+        raise HTTPException(status_code=404, detail=f"Algorithm '{algo_id}' not registered")
+    return {"status": "updated", "algo_id": algo_id, "validation_status": status}
+
+
+# ---- Emissions & Carbon Accounting ---------------------------------------
+
+@app.post("/api/emissions/estimate")
+async def estimate_emissions_public(
+    agent_type: str = Form("car"),
+    distance_km: float = Form(...),
+    idle_minutes: float = Form(0.0),
+) -> Dict[str, Any]:
+    """Public emissions estimate (pure computation, no side effects — used by
+    the dashboard without auth). The authenticated /api/emissions is kept for
+    API consumers that need auditability."""
+    report = compute_emissions(agent_type, distance_km, idle_minutes)
+    return report.to_dict()
+
+
+@app.post("/api/emissions")
+async def compute_emissions_endpoint(
+    agent_type: str = Form("car"),
+    distance_km: float = Form(...),
+    idle_minutes: float = Form(0.0),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Estimate CO2/NOx/PM for a single agent over a distance + idle time."""
+    report = compute_emissions(agent_type, distance_km, idle_minutes)
+    return report.to_dict()
+
+
+@app.post("/api/emissions/aggregate")
+async def compute_emissions_aggregate(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Aggregate emissions for a list of agents. Body:
+    {"agents": [{"agent_type": "car", "distance_km": 10.5, "idle_minutes": 2.0}, ...]}
+    """
+    body = await request.json()
+    agents = body.get("agents", [])
+    if not isinstance(agents, list):
+        raise HTTPException(status_code=400, detail="body must contain an 'agents' array")
+    reports = []
+    for a in agents:
+        reports.append(compute_emissions(
+            a.get("agent_type", "car"),
+            float(a.get("distance_km", 0.0)),
+            float(a.get("idle_minutes", 0.0)),
+        ))
+    return aggregate_emissions(reports)
+
+
+# ---- Real-Time Ingestion --------------------------------------------------
+
+@app.post("/api/ingest/{feed_type}")
+async def ingest_realtime(
+    feed_type: str,
+    request: Request,
+    current_user: Dict[str, Any] = Depends(require_role(["admin", "editor"])),
+) -> Dict[str, Any]:
+    """Normalize a real-time feed message (gtfs/cv2x/mqtt/weather) and forward
+    it to the cross-subject event bus."""
+    raw = await request.json()
+    try:
+        event = realtime_ingestion.normalize(feed_type, raw)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Forward to the event bus sidecar best-effort
+    published = False
+    try:
+        async with httpx.AsyncClient(timeout=2.0, verify=False) as client:
+            resp = await client.post(
+                f"{EVENT_BUS_HTTP_URL}/publish/{event['topic']}",
+                json=event["payload"],
+            )
+            published = resp.status_code == 200
+    except Exception:
+        published = False
+
+    return {"status": "ingested" if published else "ingested_unpublished", "event": event}
+
+
+@app.get("/api/ingest/feeds")
+async def list_ingestion_feeds(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """List supported real-time ingestion feed types and their event bus topics."""
+    return {
+        "feeds": [
+            {"feed_type": ft, "topic": topic}
+            for ft, topic in realtime_ingestion.TOPIC_MAP.items()
+        ]
+    }
+
+
+# ---- Rate limiting stats --------------------------------------------------
+
+@app.get("/api/platform/rate-limit")
+async def get_rate_limit_stats(
+    current_user: Dict[str, Any] = Depends(require_role(["admin"])),
+) -> Dict[str, Any]:
+    """Return rate limiter statistics (admin only)."""
+    return rate_limiter.stats()
 
 
 # ---------------------------------------------------------------------------

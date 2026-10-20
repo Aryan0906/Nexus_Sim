@@ -1,0 +1,7 @@
+$kind: collection
+name: 'K - Platform Services'
+order: 5000
+description: |-
+  Marketplace algorithm registry, per-workspace rate limiting, emissions
+  accounting, real-time ingestion, and scenario comparison. Requires admin JWT
+  for register/validate/ingest; viewer JWT for read-only endpoints.

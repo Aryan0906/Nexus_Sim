@@ -1,0 +1,20 @@
+$kind: http-request
+name: 'K41 - GET /api/platform/ttl'
+order: 5000
+method: GET
+url: '{{gateway}}/api/platform/ttl'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('K41 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('K41 - Returns TTL config', () => {
+        const json = pm.response.json();
+        pm.expect(json).to.have.property('ttl_seconds');
+        pm.expect(json.ttl_seconds).to.be.above(0);
+      });
+      pm.test('K41 - Has ttl_interval_seconds', () => { pm.expect(pm.response.json()).to.have.property('ttl_interval_seconds'); });
+      pm.test('K41 - Has active_simulations', () => { pm.expect(pm.response.json()).to.have.property('active_simulations'); });

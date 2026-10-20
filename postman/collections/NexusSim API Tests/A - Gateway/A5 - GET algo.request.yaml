@@ -13,3 +13,11 @@ scripts:
         const arr = Array.isArray(json) ? json : json.algorithms;
         pm.expect(arr).to.be.an('array').with.lengthOf(48);
       });
+      pm.test('A5 - Each algo has id and name', () => {
+        const json = pm.response.json();
+        const arr = Array.isArray(json) ? json : json.algorithms;
+        arr.slice(0, 5).forEach(a => {
+          pm.expect(a).to.have.property('id');
+          pm.expect(a).to.have.property('name');
+        });
+      });

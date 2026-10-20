@@ -22,3 +22,5 @@ scripts:
       pm.test('C12 - Has answer', () => { pm.expect(pm.response.json()).to.have.property('answer'); });
       pm.test('C12 - Has confidence', () => { pm.expect(pm.response.json()).to.have.property('confidence'); });
       pm.test('C12 - Has handler', () => { pm.expect(pm.response.json()).to.have.property('handler'); });
+      pm.test('C12 - confidence is a number', () => { pm.expect(pm.response.json().confidence).to.be.a('number'); });
+      pm.test('C12 - answer is a string', () => { pm.expect(pm.response.json().answer).to.be.a('string').and.not.empty; });

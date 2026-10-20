@@ -1,0 +1,37 @@
+$kind: http-request
+name: 'J38 - POST /api/scenarios'
+order: 4600
+method: POST
+url: '{{gateway}}/api/scenarios'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+  - key: Content-Type
+    value: application/x-www-form-urlencoded
+body:
+  type: formdata
+  content:
+    - key: base_simulation_id
+      value: '{{test_sim_id}}'
+      type: text
+    - key: fork_tick
+      value: '0'
+      type: text
+    - key: signal_mode
+      value: fuzzy
+      type: text
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const json = pm.response.json();
+      pm.test('J38 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('J38 - Returns scenario_id', () => {
+        pm.expect(json).to.have.property('scenario_id');
+        pm.expect(json.status).to.eql('running');
+        pm.expect(json.base_simulation_id).to.eql(pm.collectionVariables.get('test_sim_id'));
+      });
+      pm.test('J38 - Has message', () => { pm.expect(json).to.have.property('message'); });
+      if (pm.response.code === 200) {
+        pm.collectionVariables.set('test_scenario_id', json.scenario_id);
+      }

@@ -29,6 +29,7 @@ Welcome to the comprehensive documentation suite for **NexusSim** — a high-per
 - **[Master Results & Algorithm Matrix](results.md)**: Consolidated benchmarks, calibration ablations, multi-city MARL gains (+26.3% on Chicago), and the 48-algorithm portfolio matrix.
 - **[AI-Mode Stress Test Report](AI_STRESS_REPORT.md)**: Phase 8.8 stress-test report evaluating ONNX inference latency (p95 = 0.04-0.13 ms measured by `bench_inference`) and tick throughput under 20,000 active agents (8.6-9.2 ms avg / 12-16 ms p95 after the P2 spatial-grid rewrite).
 - **[Project Backlog & Technical Debt](BACKLOG.md)**: Phase completion statuses (Phases 0–36) and prioritized active backlogs.
+- **[Future Planning Roadmap](futureplanning.md)**: Production roadmap — dynamic OSM city onboarding, multi-tenant workspaces, simulation-as-a-service, what-if scenarios, real-time ingestion, algorithm marketplace, federated learning, multi-modal, disaster response, emissions, and collaboration.
 - **[Cross-Session Memory Log](SESSION_MEMORY.md)**: Historical session log preserving context, checkpoints, architectural decisions, and run records across sessions.
 - **[Academic Synopsis Generation Context](SYNOPSIS_CONTEXT.md)**: Single source of truth containing verified system facts for project reports, DFDs, ER diagrams, and project guides.
 

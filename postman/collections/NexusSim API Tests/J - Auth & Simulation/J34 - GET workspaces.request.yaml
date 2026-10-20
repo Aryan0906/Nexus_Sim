@@ -1,0 +1,24 @@
+$kind: http-request
+name: 'J34 - GET /api/workspaces'
+order: 4200
+method: GET
+url: '{{gateway}}/api/workspaces'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('J34 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('J34 - Returns array', () => { pm.expect(pm.response.json()).to.be.an('array'); });
+      pm.test('J34 - Has ws_default', () => {
+        const ids = pm.response.json().map(w => w.workspace_id);
+        pm.expect(ids).to.include('ws_default');
+      });
+      pm.test('J34 - Each workspace has required fields', () => {
+        pm.response.json().forEach(ws => {
+          pm.expect(ws).to.have.property('workspace_id');
+          pm.expect(ws).to.have.property('name');
+        });
+      });

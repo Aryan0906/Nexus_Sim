@@ -1,0 +1,23 @@
+$kind: http-request
+name: 'J40 - POST /api/auth/login (wrong password)'
+order: 4800
+method: POST
+url: '{{gateway}}/api/auth/login'
+headers:
+  - key: Content-Type
+    value: application/x-www-form-urlencoded
+body:
+  type: formdata
+  content:
+    - key: username
+      value: admin
+      type: text
+    - key: password
+      value: wrongpassword
+      type: text
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('J40 - Status 401', () => { pm.response.to.have.status(401); });
+      pm.test('J40 - Has detail', () => { pm.expect(pm.response.json()).to.have.property('detail'); });

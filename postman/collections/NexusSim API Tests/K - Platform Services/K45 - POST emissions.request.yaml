@@ -1,0 +1,34 @@
+$kind: http-request
+name: 'K45 - POST /api/emissions'
+order: 5400
+method: POST
+url: '{{gateway}}/api/emissions'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+  - key: Content-Type
+    value: application/x-www-form-urlencoded
+body:
+  type: formdata
+  content:
+    - key: agent_type
+      value: car
+      type: text
+    - key: distance_km
+      value: '100'
+      type: text
+    - key: idle_minutes
+      value: '10'
+      type: text
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('K45 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('K45 - Returns CO2 estimate', () => {
+        const json = pm.response.json();
+        pm.expect(json).to.have.property('co2_g');
+        pm.expect(json.co2_g).to.be.above(0);
+      });
+      pm.test('K45 - Has agent_type', () => { pm.expect(pm.response.json()).to.have.property('agent_type'); });
+      pm.test('K45 - agent_type is car', () => { pm.expect(pm.response.json().agent_type).to.eql('car'); });

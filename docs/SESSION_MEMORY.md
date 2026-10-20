@@ -12,6 +12,33 @@ Quick orientation:
 
 ---
 
+## Session 8 — 2026-10-21 | Gateway SaaS Layer: Auth, Workspaces, City Onboarding, Simulations & Scenarios
+
+**Work done**
+- Implemented the full backend SaaS layer on branch `feature/futureplanning-full-implementation` (unified gateway port 8000):
+  - **Auth & JWT** (`gateway/auth.py`, new): `/api/auth/login`, `/api/auth/me` with HS256 tokens; in-memory USERS/WORKSPACES store.
+  - **Multi-tenant workspaces**: `/api/workspaces` (list), admin-only create; `require_workspace_access` / `require_role` dependencies.
+  - **Dynamic city onboarding**: `GET /api/cities`, `GET /api/cities/{id}`, `POST /api/cities/upload` (OSM/PBF/GraphML via `pipeline/src/import_osm`, writes `cities.yaml` + `data/<city>/`).
+  - **Simulation-as-a-Service**: `POST/GET/GET-by-id/DELETE /api/simulations` — launches `engine/build/engine.exe` per sim, in-memory registry, workspace-scoped access.
+  - **What-if scenario engine**: `POST/GET/GET-by-id /api/scenarios` — forks a base sim with signal_mode/demand_scale/incident mutations.
+  - Health endpoint now reports `simulation_service` stats; service proxies unchanged.
+- **Tests**: 22/22 `gateway/test_gateway.py` passing (auth, workspaces, cities incl. upload, simulations, scenarios, offline-proxy grace).
+- **Postman**: collection `J - Auth & Simulation` (J32–J40) + `api_check.py` updated with configurable base URLs + JSON/MD results export.
+- **Dashboard**: `CitySelector.tsx` fetches dynamic cities from `/api/cities` (fallback to hardcoded `CITIES`) and adds an "+ Upload City (OSM)" button.
+- **Commits**: `dd62555` (gateway SaaS layer), `594db8f` (dashboard CitySelector wiring). Working tree clean.
+
+**Key state**
+- Branch: `feature/futureplanning-full-implementation` (ahead of `main`; not yet merged/PR'd).
+- Engine `engine/build/engine.exe` exists; simulation tests exercise it but assert non-401/403 when not built.
+- `.venv\Scripts\python.exe` (Python 3.11.9); installed `python-jose[cryptography]`, `python-multipart`, `osmnx` for gateway imports.
+
+**What to do next**
+- Open a PR to merge `feature/futureplanning-full-implementation` into `main` (add CI gateway test step if absent).
+- Consider persisting SIMULATIONS/SCENARIOS registry to SQLite/PostgreSQL (currently in-memory).
+- See `docs/BACKLOG.md` for remaining cross-phase pending work (all technical debt items BK-01..BK-06 are DONE).
+
+---
+
 ## Session 7 — 2026-09-29 | 36-Algorithm Expansion, Master Matrix & Event Bus Integration
 
 **Work done**

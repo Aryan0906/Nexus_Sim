@@ -1,0 +1,30 @@
+$kind: http-request
+name: 'K49 - POST /api/ingest/weather'
+order: 5800
+method: POST
+url: '{{gateway}}/api/ingest/weather'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "city": "mumbai",
+      "precip_mm": 10.0,
+      "wind_kph": 50.0,
+      "visibility_m": 1000
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('K49 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('K49 - Demand multiplier < 1 under heavy weather', () => {
+        const json = pm.response.json();
+        pm.expect(json.event.topic).to.eql('scenario.demand_spike');
+        pm.expect(json.event.payload.demand_multiplier).to.be.below(1.0);
+      });
+      pm.test('K49 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });

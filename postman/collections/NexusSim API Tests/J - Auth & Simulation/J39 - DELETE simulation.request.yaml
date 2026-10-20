@@ -1,0 +1,23 @@
+$kind: http-request
+name: 'J39 - DELETE /api/simulations/{id}'
+order: 4700
+method: DELETE
+url: '{{gateway}}/api/simulations/{{test_sim_id}}'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      if (!pm.collectionVariables.get('test_sim_id')) {
+        pm.test('J39 - Skipped (no sim id)', () => { pm.expect(true).to.be.true; });
+      } else {
+        pm.test('J39 - Status 200', () => { pm.response.to.have.status(200); });
+        pm.test('J39 - Confirm deletion', () => {
+          const json = pm.response.json();
+          pm.expect(json.status).to.eql('deleted');
+          pm.expect(json).to.have.property('simulation_id');
+        });
+        pm.collectionVariables.unset('test_sim_id');
+      }

@@ -21,3 +21,4 @@ scripts:
       pm.test('C13 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });
       pm.test('C13 - Has message', () => { pm.expect(pm.response.json()).to.have.property('message'); });
       pm.test('C13 - Has incident_spec', () => { pm.expect(pm.response.json()).to.have.property('incident_spec'); });
+      pm.test('C13 - incident_spec has type', () => { pm.expect(pm.response.json().incident_spec).to.have.property('type'); });

@@ -23,3 +23,7 @@ scripts:
       pm.test('C14 - Has sentiment', () => { pm.expect(pm.response.json()).to.have.property('sentiment'); });
       pm.test('C14 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });
       pm.test('C14 - Has text', () => { pm.expect(pm.response.json()).to.have.property('text'); });
+      pm.test('C14 - city is chicago', () => { pm.expect(pm.response.json().city).to.eql('chicago'); });
+      pm.test('C14 - sentiment is positive or negative or neutral', () => {
+        pm.expect(['positive','negative','neutral']).to.include(pm.response.json().sentiment);
+      });

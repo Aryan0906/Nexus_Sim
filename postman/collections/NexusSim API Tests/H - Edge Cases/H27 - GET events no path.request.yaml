@@ -8,3 +8,7 @@ scripts:
     language: text/javascript
     code: |-
       pm.test('H27 - Expect 404 for missing path segment', () => { pm.response.to.have.status(404); });
+      pm.test('H27 - Has error detail', () => {
+        const json = pm.response.json();
+        pm.expect(json).to.satisfy(j => j.detail !== undefined || j.error !== undefined);
+      });

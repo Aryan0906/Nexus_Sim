@@ -1,0 +1,48 @@
+$kind: http-request
+name: 'K43 - POST /api/algo/register'
+order: 5200
+method: POST
+url: '{{gateway}}/api/algo/register'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+  - key: Content-Type
+    value: application/x-www-form-urlencoded
+body:
+  type: formdata
+  content:
+    - key: algo_id
+      value: postman_custom_rl
+      type: text
+    - key: name
+      value: Postman Custom RL
+      type: text
+    - key: discipline
+      value: RL
+      type: text
+    - key: version
+      value: '1.0.0'
+      type: text
+    - key: onnx_path
+      value: s3://models/postman_custom_rl.onnx
+      type: text
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('K43 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('K43 - Registered with pending validation', () => {
+        const json = pm.response.json();
+        pm.expect(json.status).to.eql('registered');
+        pm.expect(json.algo.algo_id).to.eql('postman_custom_rl');
+        pm.expect(json.algo.validation_status).to.eql('pending');
+      });
+      pm.test('K43 - algo has required fields', () => {
+        const algo = pm.response.json().algo;
+        pm.expect(algo).to.have.property('name');
+        pm.expect(algo).to.have.property('discipline');
+        pm.expect(algo).to.have.property('version');
+      });
+      if (pm.response.code === 200) {
+        pm.collectionVariables.set('registered_algo_id', pm.response.json().algo.algo_id);
+      }

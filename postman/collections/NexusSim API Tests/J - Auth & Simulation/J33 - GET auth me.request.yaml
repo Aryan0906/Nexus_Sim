@@ -1,0 +1,21 @@
+$kind: http-request
+name: 'J33 - GET /api/auth/me'
+order: 4100
+method: GET
+url: '{{gateway}}/api/auth/me'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('J33 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('J33 - Returns user info', () => {
+        const json = pm.response.json();
+        pm.expect(json).to.have.property('username');
+        pm.expect(json).to.have.property('role');
+        pm.expect(json).to.have.property('workspaces');
+      });
+      pm.test('J33 - username is admin', () => { pm.expect(pm.response.json().username).to.eql('admin'); });
+      pm.test('J33 - role is admin', () => { pm.expect(pm.response.json().role).to.eql('admin'); });

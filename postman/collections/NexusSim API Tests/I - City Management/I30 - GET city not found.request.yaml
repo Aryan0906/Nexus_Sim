@@ -1,0 +1,11 @@
+$kind: http-request
+name: 'I30 - GET /api/cities/{city_id} not found'
+order: 3200
+method: GET
+url: '{{gateway}}/api/cities/nonexistent-city-xyz'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('I30 - Status 404', () => { pm.response.to.have.status(404); });
+      pm.test('I30 - Has detail message', () => { pm.expect(pm.response.json()).to.have.property('detail'); });

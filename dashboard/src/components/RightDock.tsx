@@ -5,6 +5,7 @@ import { VirtualCameraPanel } from './VirtualCameraPanel';
 import { ChatPanel } from './ChatPanel';
 import { IncidentReportPanel } from './IncidentReportPanel';
 import { AlgoExplorerPanel } from './AlgoExplorer/AlgoExplorerPanel';
+import { EmissionsPanel } from './EmissionsPanel';
 import type { IntersectionSignalState, SignalMode } from '../hooks/useWebSocket';
 
 interface ZoneMetric {
@@ -33,13 +34,14 @@ interface RightDockProps {
   onToggleCollapse: () => void;
 }
 
-type TabType = 'metrics' | 'vision' | 'chat' | 'algos' | 'all';
+type TabType = 'metrics' | 'vision' | 'chat' | 'algos' | 'emissions' | 'all';
 
 const TABS: { id: TabType; label: string; icon: string }[] = [
   { id: 'metrics', label: 'Metrics', icon: '📊' },
   { id: 'vision', label: 'Vision', icon: '👁️' },
   { id: 'chat', label: 'Chat', icon: '💬' },
   { id: 'algos', label: 'Algos', icon: '🧪' },
+  { id: 'emissions', label: 'Carbon', icon: '🌱' },
   { id: 'all', label: 'All', icon: '📑' },
 ];
 
@@ -244,6 +246,8 @@ export const RightDock: React.FC<RightDockProps> = ({
 
         {activeTab === 'algos' && <AlgoExplorerPanel />}
 
+        {activeTab === 'emissions' && <EmissionsPanel />}
+
         {activeTab === 'all' && (
           <>
             <MetricsPanel
@@ -265,6 +269,8 @@ export const RightDock: React.FC<RightDockProps> = ({
             <IncidentReportPanel city={city || 'chicago'} visible={true} />
             <div style={{ height: '1px', backgroundColor: 'rgba(55, 65, 81, 0.6)', margin: '4px 0' }} />
             <AlgoExplorerPanel />
+            <div style={{ height: '1px', backgroundColor: 'rgba(55, 65, 81, 0.6)', margin: '4px 0' }} />
+            <EmissionsPanel />
           </>
         )}
       </div>

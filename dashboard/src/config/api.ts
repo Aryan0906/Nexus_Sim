@@ -32,4 +32,10 @@ export const ENDPOINTS = {
 
   /** Gateway Health & Microservices status */
   HEALTH: `${BACKEND_HTTP}/api/health`,
+
+  /** Dynamic city list (multi-tenant onboarding) */
+  CITIES: `${BACKEND_HTTP}/api/cities`,
+
+  /** Public emissions estimate (pure computation) */
+  EMISSIONS_ESTIMATE: `${BACKEND_HTTP}/api/emissions/estimate`,
 };

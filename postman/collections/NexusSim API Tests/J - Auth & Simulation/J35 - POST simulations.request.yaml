@@ -1,0 +1,44 @@
+$kind: http-request
+name: 'J35 - POST /api/simulations'
+order: 4300
+method: POST
+url: '{{gateway}}/api/simulations'
+headers:
+  - key: Authorization
+    value: 'Bearer {{auth_token}}'
+  - key: Content-Type
+    value: application/x-www-form-urlencoded
+body:
+  type: formdata
+  content:
+    - key: city_id
+      value: chicago
+      type: text
+    - key: workspace_id
+      value: ws_default
+      type: text
+    - key: duration_min
+      value: '5'
+      type: text
+    - key: agent_count
+      value: '100'
+      type: text
+    - key: signal_mode
+      value: auto
+      type: text
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      const json = pm.response.json();
+      pm.test('J35 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('J35 - Returns simulation_id', () => {
+        pm.expect(json).to.have.property('simulation_id');
+        pm.expect(json.status).to.eql('running');
+        pm.expect(json.city_id).to.eql('chicago');
+      });
+      pm.test('J35 - Has pid', () => { pm.expect(json).to.have.property('pid'); });
+      pm.test('J35 - Has message', () => { pm.expect(json).to.have.property('message'); });
+      if (pm.response.code === 200) {
+        pm.collectionVariables.set('test_sim_id', json.simulation_id);
+      }

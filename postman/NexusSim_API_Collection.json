@@ -1,228 +1,1438 @@
 {
   "info": {
     "name": "NexusSim API",
-    "description": "Full-stack API collection for NexusSim. Import into Postman (File > Import) and run top to bottom. All services must be running (run_full_system.bat or the individual launchers). Verified 2026-10-20: 24/24 endpoints pass.",
+    "description": "Full-stack API collection for NexusSim. Import into Postman (File > Import) and run top to bottom. Covers A-H (original), I (city management), J (auth & simulation), K (platform services). All services must be running (run_full_system.bat). Gateway serves HTTPS with a local self-signed cert.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "gw", "value": "http://localhost:8000" },
-    { "key": "engine", "value": "http://localhost:9001" },
-    { "key": "camera", "value": "http://localhost:9003" },
-    { "key": "nlp", "value": "http://localhost:9004" },
-    { "key": "eventbus", "value": "http://localhost:9005" },
-    { "key": "algo", "value": "http://localhost:9006" },
-    { "key": "dashboard", "value": "http://localhost:3000" }
+    {
+      "key": "gw",
+      "value": "https://localhost:8000"
+    },
+    {
+      "key": "engine",
+      "value": "https://localhost:9001"
+    },
+    {
+      "key": "camera",
+      "value": "https://localhost:9003"
+    },
+    {
+      "key": "nlp",
+      "value": "https://localhost:9004"
+    },
+    {
+      "key": "eventbus",
+      "value": "https://localhost:9005"
+    },
+    {
+      "key": "algo",
+      "value": "https://localhost:9006"
+    },
+    {
+      "key": "dashboard",
+      "value": "https://localhost:3000"
+    },
+    {
+      "key": "auth_token",
+      "value": ""
+    },
+    {
+      "key": "test_sim_id",
+      "value": ""
+    },
+    {
+      "key": "test_scenario_id",
+      "value": ""
+    },
+    {
+      "key": "registered_algo_id",
+      "value": ""
+    }
   ],
   "item": [
     {
-      "name": "1. Gateway (:8000)",
+      "name": "A - Gateway (:8000)",
       "item": [
         {
-          "name": "GET /api/health",
+          "name": "A1 GET /api/health",
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{gw}}/api/health", "host": ["{{gw}}"], "path": ["api", "health"] }
-          }
+            "url": "{{gw}}/api/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('A1 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('A1 - has services', () => { pm.expect(pm.response.json()).to.have.property('services'); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "POST /api/chat",
+          "name": "A2 POST /api/chat",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"query\": \"what is the average wait time\",\n  \"city\": \"chicago\"\n}" },
-            "url": { "raw": "{{gw}}/api/chat", "host": ["{{gw}}"], "path": ["api", "chat"] }
-          }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{gw}}/api/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"what is the average wait time\",\n  \"city\": \"chicago\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('A2 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('A2 - keys', () => { const k = Object.keys(pm.response.json()); pm.expect(k).to.include.members(['intent','answer','confidence','handler']); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "POST /api/incident",
+          "name": "A3 POST /api/incident",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"text\": \"accident on main street\",\n  \"city\": \"chicago\"\n}" },
-            "url": { "raw": "{{gw}}/api/incident", "host": ["{{gw}}"], "path": ["api", "incident"] }
-          }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{gw}}/api/incident",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"accident on main street\",\n  \"city\": \"chicago\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('A3 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('A3 - keys', () => { const k = Object.keys(pm.response.json()); pm.expect(k).to.include.members(['status','message','incident_spec']); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "GET /api/camera/feed",
+          "name": "A4 GET /api/camera/feed",
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{gw}}/api/camera/feed", "host": ["{{gw}}"], "path": ["api", "camera", "feed"] }
-          }
+            "url": "{{gw}}/api/camera/feed"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('A4 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('A4 - json feed', () => { pm.expect(pm.response.headers.get('content-type')).to.include('application/json'); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "GET /api/algo (48-algorithm catalog)",
+          "name": "A5 GET /api/algo",
           "request": {
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{gw}}/api/algo", "host": ["{{gw}}"], "path": ["api", "algo"] }
-          }
+            "url": "{{gw}}/api/algo"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('A5 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('A5 - 48 algorithms', () => { const d = pm.response.json(); const n = Array.isArray(d) ? d.length : d.algorithms.length; pm.expect(n).to.eql(48); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "POST /api/events/publish/cv.anomaly",
+          "name": "A6 POST /api/events/publish/cv.anomaly",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"message\": \"test anomaly\",\n  \"severity\": \"low\"\n}" },
-            "url": { "raw": "{{gw}}/api/events/publish/cv.anomaly", "host": ["{{gw}}"], "path": ["api", "events", "publish", "cv.anomaly"] }
-          }
-        },
-        {
-          "name": "WS /ws (engine state stream)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "body": { "mode": "raw", "raw": "{\n  \"type\": \"city\",\n  \"city\": \"chicago\"\n}" },
-            "url": { "raw": "ws://localhost:8000/ws", "protocol": "ws", "host": ["localhost"], "port": "8000", "path": ["ws"] }
-          }
-        },
-        {
-          "name": "WS /ws/events (event bus stream)",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "body": { "mode": "raw", "raw": "{\n  \"type\": \"subscribe\",\n  \"topic\": \"cv.anomaly\"\n}" },
-            "url": { "raw": "ws://localhost:8000/ws/events", "protocol": "ws", "host": ["localhost"], "port": "8000", "path": ["ws", "events"] }
-          }
-        },
-        {
-          "name": "POST /api/events/publish/cv.anomaly (publish via gateway)",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"message\": \"test anomaly\",\n  \"severity\": \"low\"\n}" },
-            "url": { "raw": "{{gw}}/api/events/publish/cv.anomaly", "host": ["{{gw}}"], "path": ["api", "events", "publish", "cv.anomaly"] }
-          }
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{gw}}/api/events/publish/cv.anomaly",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"test anomaly\",\n  \"severity\": \"low\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('A6 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('A6 - keys', () => { const k = Object.keys(pm.response.json()); pm.expect(k).to.include.members(['status','topic']); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "2. Virtual Camera (:9003)",
+      "name": "B - Virtual Camera (:9003)",
       "item": [
         {
-          "name": "GET /health",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{camera}}/health", "host": ["{{camera}}"], "path": ["health"] } }
-        },
-        {
-          "name": "GET /api/camera/feed",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{camera}}/api/camera/feed", "host": ["{{camera}}"], "path": ["api", "camera", "feed"] } }
-        }
-      ]
-    },
-    {
-      "name": "3. NLP Chat (:9004)",
-      "item": [
-        {
-          "name": "GET /health",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{nlp}}/health", "host": ["{{nlp}}"], "path": ["health"] } }
-        },
-        {
-          "name": "POST /chat",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"query\": \"set signal mode fuzzy\",\n  \"city\": \"chicago\"\n}" },
-            "url": { "raw": "{{nlp}}/chat", "host": ["{{nlp}}"], "path": ["chat"] }
-          }
-        },
-        {
-          "name": "POST /incident",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"text\": \"road closed at 5th avenue\",\n  \"city\": \"chicago\"\n}" },
-            "url": { "raw": "{{nlp}}/incident", "host": ["{{nlp}}"], "path": ["incident"] }
-          }
-        },
-        {
-          "name": "POST /feedback",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"text\": \"the simulation is great\",\n  \"city\": \"chicago\"\n}" },
-            "url": { "raw": "{{nlp}}/feedback", "host": ["{{nlp}}"], "path": ["feedback"] }
-          }
-        }
-      ]
-    },
-    {
-      "name": "4. Event Bus (:9005)",
-      "item": [
-        {
-          "name": "GET /health",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{eventbus}}/health", "host": ["{{eventbus}}"], "path": ["health"] } }
-        },
-        {
-          "name": "GET /events",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{eventbus}}/events", "host": ["{{eventbus}}"], "path": ["events"] } }
-        },
-        {
-          "name": "POST /publish/cv.anomaly",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"message\": \"test anomaly\",\n  \"severity\": \"low\"\n}" },
-            "url": { "raw": "{{eventbus}}/publish/cv.anomaly", "host": ["{{eventbus}}"], "path": ["publish", "cv.anomaly"] }
-          }
-        },
-        {
-          "name": "WS /ws (event stream)",
+          "name": "B9 GET /health",
           "request": {
             "method": "GET",
             "header": [],
-            "body": { "mode": "raw", "raw": "{\n  \"type\": \"subscribe\",\n  \"topic\": \"cv.anomaly\"\n}" },
-            "url": { "raw": "ws://localhost:9005/ws", "protocol": "ws", "host": ["localhost"], "port": "9005", "path": ["ws"] }
-          }
-        }
-      ]
-    },
-    {
-      "name": "5. Algo Explorer (:9006)",
-      "item": [
-        {
-          "name": "GET /health",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{algo}}/health", "host": ["{{algo}}"], "path": ["health"] } }
+            "url": "{{camera}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('B9 - Status 200', () => { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
         },
         {
-          "name": "GET /algorithms",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{algo}}/algorithms", "host": ["{{algo}}"], "path": ["algorithms"] } }
-        },
-        {
-          "name": "POST /algorithms/toggle",
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"algo_id\": \"CV-1\",\n  \"active\": false\n}" },
-            "url": { "raw": "{{algo}}/algorithms/toggle", "host": ["{{algo}}"], "path": ["algorithms", "toggle"] }
-          }
-        }
-      ]
-    },
-    {
-      "name": "6. Dashboard (:3000)",
-      "item": [
-        {
-          "name": "GET / (SPA)",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{dashboard}}/", "host": ["{{dashboard}}"], "path": [""] } }
-        },
-        {
-          "name": "GET /data/36_algo_matrix.json",
-          "request": { "method": "GET", "header": [], "url": { "raw": "{{dashboard}}/data/36_algo_matrix.json", "host": ["{{dashboard}}"], "path": ["data", "36_algo_matrix.json"] } }
-        }
-      ]
-    },
-    {
-      "name": "7. Engine direct (:9001)",
-      "item": [
-        {
-          "name": "WS direct (state stream)",
+          "name": "B10 GET /api/camera/feed",
           "request": {
             "method": "GET",
             "header": [],
-            "body": { "mode": "raw", "raw": "{\n  \"type\": \"city\",\n  \"city\": \"chicago\"\n}" },
-            "url": { "raw": "ws://localhost:9001", "protocol": "ws", "host": ["localhost"], "port": "9001", "path": [""] }
-          }
+            "url": "{{camera}}/api/camera/feed"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('B10 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('B10 - json', () => { pm.expect(pm.response.headers.get('content-type')).to.include('application/json'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "C - NLP Chat (:9004)",
+      "item": [
+        {
+          "name": "C11 GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{nlp}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('C11 - Status 200', () => { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C12 POST /chat",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{nlp}}/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"set signal mode fuzzy\",\n  \"city\": \"chicago\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('C12 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('C12 - keys', () => { const k = Object.keys(pm.response.json()); pm.expect(k).to.include.members(['intent','answer','confidence','handler']); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C13 POST /incident",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{nlp}}/incident",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"road closed at 5th avenue\",\n  \"city\": \"chicago\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('C13 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('C13 - keys', () => { const k = Object.keys(pm.response.json()); pm.expect(k).to.include.members(['status','message','incident_spec']); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "C14 POST /feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{nlp}}/feedback",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"the simulation is great\",\n  \"city\": \"chicago\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('C14 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('C14 - keys', () => { const k = Object.keys(pm.response.json()); pm.expect(k).to.include.members(['category','city','sentiment','status','text']); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "D - Event Bus (:9005)",
+      "item": [
+        {
+          "name": "D15 GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{eventbus}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('D15 - Status 200', () => { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D16 GET /events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{eventbus}}/events"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('D16 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('D16 - array', () => { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "D17 POST /publish/cv.anomaly",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{eventbus}}/publish/cv.anomaly",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"test anomaly\",\n  \"severity\": \"low\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('D17 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('D17 - published', () => { pm.expect(pm.response.json().status).to.eql('published'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "E - Algo Explorer (:9006)",
+      "item": [
+        {
+          "name": "E19 GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{algo}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('E19 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('E19 - total 48', () => { pm.expect(pm.response.json().total_algorithms).to.eql(48); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E20 GET /algorithms",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{algo}}/algorithms"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('E20 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('E20 - 48 items', () => { pm.expect(pm.response.json()).to.be.an('array').with.lengthOf(48); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E21a POST toggle disable CV-1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{algo}}/algorithms/toggle",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"algo_id\": \"CV-1\",\n  \"active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('E21a - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('E21a - DISABLED', () => { pm.expect(pm.response.json().algo.status).to.eql('DISABLED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "E21b POST toggle restore CV-1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{algo}}/algorithms/toggle",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"algo_id\": \"CV-1\",\n  \"active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('E21b - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('E21b - ACTIVE', () => { pm.expect(pm.response.json().algo.status).to.eql('ACTIVE'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "F - Dashboard (:3000)",
+      "item": [
+        {
+          "name": "F22 GET /",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{dashboard}}/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('F22 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('F22 - root div', () => { pm.expect(pm.response.text()).to.include('root'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "F23 GET /data/36_algo_matrix.json",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{dashboard}}/data/36_algo_matrix.json"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('F23 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('F23 - 48 algorithms', () => { pm.expect(pm.response.json().total_algorithms).to.eql(48); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "H - Edge Cases",
+      "item": [
+        {
+          "name": "H25 POST /api/chat wrong field -> 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{gw}}/api/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('H25 - Status 422', () => { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "H27 GET /api/events no path -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gw}}/api/events"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('H27 - Status 404', () => { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "I - City Management",
+      "item": [
+        {
+          "name": "I28 GET /api/cities",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gw}}/api/cities"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('I28 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('I28 - has chicago', () => { const ids = pm.response.json().map(c => c.city_id); pm.expect(ids).to.include('chicago'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "I29 GET /api/cities/chicago",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gw}}/api/cities/chicago"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('I29 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('I29 - city_id', () => { pm.expect(pm.response.json().city_id).to.eql('chicago'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "I30 GET /api/cities/nonexistent -> 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{gw}}/api/cities/nonexistent-city-xyz"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('I30 - Status 404', () => { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "J - Auth & Simulation",
+      "item": [
+        {
+          "name": "J32 POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{gw}}/api/auth/login",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "admin",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "admin",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J32 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J32 - access_token', () => { pm.expect(pm.response.json()).to.have.property('access_token'); });",
+                  "pm.collectionVariables.set('auth_token', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "J33 GET /api/auth/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J33 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J33 - username', () => { pm.expect(pm.response.json().username).to.eql('admin'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "J34 GET /api/workspaces",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/workspaces"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J34 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J34 - ws_default', () => { const ids = pm.response.json().map(w => w.workspace_id); pm.expect(ids).to.include('ws_default'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "J35 POST /api/simulations",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{gw}}/api/simulations",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "city_id",
+                  "value": "chicago",
+                  "type": "text"
+                },
+                {
+                  "key": "workspace_id",
+                  "value": "ws_default",
+                  "type": "text"
+                },
+                {
+                  "key": "duration_min",
+                  "value": "5",
+                  "type": "text"
+                },
+                {
+                  "key": "agent_count",
+                  "value": "100",
+                  "type": "text"
+                },
+                {
+                  "key": "signal_mode",
+                  "value": "auto",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J35 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J35 - running', () => { pm.expect(pm.response.json().status).to.eql('running'); });",
+                  "pm.collectionVariables.set('test_sim_id', pm.response.json().simulation_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "J36 GET /api/simulations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/simulations"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J36 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J36 - array', () => { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "J37 GET /api/simulations/{{test_sim_id}}",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/simulations/{{test_sim_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J37 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J37 - city', () => { pm.expect(pm.response.json().city_id).to.eql('chicago'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "J38 POST /api/scenarios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{gw}}/api/scenarios",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "base_simulation_id",
+                  "value": "{{test_sim_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fork_tick",
+                  "value": "0",
+                  "type": "text"
+                },
+                {
+                  "key": "signal_mode",
+                  "value": "fuzzy",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J38 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J38 - scenario running', () => { pm.expect(pm.response.json().status).to.eql('running'); });",
+                  "pm.collectionVariables.set('test_scenario_id', pm.response.json().scenario_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "J39 GET /api/scenarios/{{test_scenario_id}}",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/scenarios/{{test_scenario_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J39 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J39 - scenario id', () => { pm.expect(pm.response.json()).to.have.property('scenario_id'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "J40 DELETE /api/simulations/{{test_sim_id}}",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/simulations/{{test_sim_id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('J40 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('J40 - deleted', () => { pm.expect(pm.response.json().status).to.eql('deleted'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "K - Platform Services",
+      "item": [
+        {
+          "name": "K41 GET /api/platform/ttl",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/platform/ttl"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K41 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K41 - ttl_seconds', () => { pm.expect(pm.response.json().ttl_seconds).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K42 GET /api/algo/registry",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/algo/registry"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K42 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K42 - array', () => { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K43 POST /api/algo/register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{gw}}/api/algo/register",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "algo_id",
+                  "value": "postman_custom_rl",
+                  "type": "text"
+                },
+                {
+                  "key": "name",
+                  "value": "Postman Custom RL",
+                  "type": "text"
+                },
+                {
+                  "key": "discipline",
+                  "value": "RL",
+                  "type": "text"
+                },
+                {
+                  "key": "version",
+                  "value": "1.0.0",
+                  "type": "text"
+                },
+                {
+                  "key": "onnx_path",
+                  "value": "s3://models/postman_custom_rl.onnx",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K43 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K43 - pending', () => { pm.expect(pm.response.json().algo.validation_status).to.eql('pending'); });",
+                  "pm.collectionVariables.set('registered_algo_id', pm.response.json().algo.algo_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K44 POST /api/algo/registry/{{registered_algo_id}}/validate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{gw}}/api/algo/registry/{{registered_algo_id}}/validate",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "status",
+                  "value": "validated",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K44 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K44 - validated', () => { pm.expect(pm.response.json().validation_status).to.eql('validated'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K45 POST /api/emissions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "url": "{{gw}}/api/emissions",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "agent_type",
+                  "value": "car",
+                  "type": "text"
+                },
+                {
+                  "key": "distance_km",
+                  "value": "100",
+                  "type": "text"
+                },
+                {
+                  "key": "idle_minutes",
+                  "value": "10",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K45 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K45 - co2', () => { pm.expect(pm.response.json().co2_g).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K46 POST /api/emissions/aggregate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{gw}}/api/emissions/aggregate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agents\": [\n    {\n      \"agent_type\": \"car\",\n      \"distance_km\": 50.0,\n      \"idle_minutes\": 5.0\n    },\n    {\n      \"agent_type\": \"ev\",\n      \"distance_km\": 50.0,\n      \"idle_minutes\": 5.0\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K46 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K46 - 2 agents', () => { pm.expect(pm.response.json().total_agents).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K47 GET /api/ingest/feeds",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/ingest/feeds"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K47 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K47 - 4 feeds', () => { const t = pm.response.json().feeds.map(f => f.feed_type); pm.expect(t).to.have.members(['gtfs','cv2x','mqtt','weather']); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K48 POST /api/ingest/gtfs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{gw}}/api/ingest/gtfs",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vehicle_id\": \"V1\",\n  \"route_id\": \"R1\",\n  \"lat\": 19.07,\n  \"lon\": 72.87,\n  \"speed_kph\": 25.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K48 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K48 - nlp.incident', () => { pm.expect(pm.response.json().event.topic).to.eql('nlp.incident'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K49 POST /api/ingest/weather",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{gw}}/api/ingest/weather",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"city\": \"mumbai\",\n  \"precip_mm\": 10.0,\n  \"wind_kph\": 50.0,\n  \"visibility_m\": 1000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K49 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K49 - demand < 1', () => { pm.expect(pm.response.json().event.payload.demand_multiplier).to.be.below(1.0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "K50 GET /api/platform/rate-limit",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{gw}}/api/platform/rate-limit"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('K50 - Status 200', () => { pm.response.to.have.status(200); });",
+                  "pm.test('K50 - stats', () => { pm.expect(pm.response.json()).to.have.property('tracked_requests'); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     }

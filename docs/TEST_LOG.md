@@ -116,4 +116,30 @@ All endpoints return expected status codes and response shapes; the gateway heal
 
 ---
 
+## Run 4 — 2026-10-21 (Postman collection via Newman headless)
+
+**Runner:** Newman 6.2.3 (`npx newman run postman/NexusSim_API_Collection.json -e postman/NexusSim_Environment.json --insecure`)
+**Collection:** `postman/NexusSim_API_Collection.json` (v2.1, 45 requests, 10 folders)
+**Services tested against:** localhost (all services running)
+
+| Folder | Requests | Assertions |
+|--------|----------|------------|
+| A - Gateway (:8000) | 6 | 12 |
+| B - Virtual Camera (:9003) | 2 | 4 |
+| C - NLP Chat (:9004) | 4 | 8 |
+| D - Event Bus (:9005) | 3 | 5 |
+| E - Algo Explorer (:9006) | 4 | 8 |
+| F - Dashboard (:3000) | 2 | 4 |
+| H - Edge Cases | 2 | 2 |
+| I - City Management | 3 | 5 |
+| J - Auth & Simulation | 9 | 18 |
+| K - Platform Services | 10 | 18 |
+| **TOTAL** | **45** | **84** |
+
+**Result: 84 / 84 assertions PASSED** | 0 failures | 0.46s avg response
+
+Includes the dynamic city management, JWT auth + workspaces, simulation-as-a-service, what-if scenarios, algorithm marketplace registry, emissions accounting, and real-time ingestion endpoints added for the production roadmap (`docs/futureplanning.md`).
+
+---
+
 *Append new runs below this line.*

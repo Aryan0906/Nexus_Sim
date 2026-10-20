@@ -71,43 +71,72 @@ FetchContent_MakeAvailable(flatbuffers)
 # is the first stable line whose public headers are MinGW-compatible
 # (__stdcall instead of the MSVC-only _stdcall alias).
 option(ENABLE_ONNX "Enable ONNX Runtime inference support (AI signal mode)" ON)
+# Optional experiment: link the CUDA-enabled ONNX Runtime GPU package so the
+# engine can select the CUDA execution provider via --onnx-provider cuda/auto.
+# Requires CUDA/cuDNN runtime DLLs on PATH at run time; falls back to CPU.
+option(ENABLE_ONNX_CUDA "Use the ONNX Runtime GPU package (CUDA execution provider)" OFF)
 if(ENABLE_ONNX)
-  if(WIN32)
-    FetchContent_Declare(
-      onnxruntime
-      URL https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/onnxruntime-win-x64-1.24.1.zip
-      URL_HASH SHA256=c72736c16442cad417ee4f45e3e2fbd10778e70a0fc1cb0e86f028d766e525af
-    )
+  if(ENABLE_ONNX_CUDA)
+    set(ORT_PKG "onnxruntime-win-x64-gpu-1.24.1.zip")
+    set(ORT_HASH "SHA256=176af2aade9eb9e429cd2a738aa5d71a1f20ec7123e4b99a382ad62b9db970fb")
+    set(ORT_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/${ORT_PKG}")
+  elseif(WIN32)
+    set(ORT_PKG "onnxruntime-win-x64-1.24.1.zip")
+    set(ORT_HASH "SHA256=c72736c16442cad417ee4f45e3e2fbd10778e70a0fc1cb0e86f028d766e525af")
+    set(ORT_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/${ORT_PKG}")
   else()
-    FetchContent_Declare(
-      onnxruntime
-      URL https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/onnxruntime-linux-x64-1.24.1.tgz
-      URL_HASH SHA256=9142552248b735920f9390027e4512a2cacf8946a1ffcbe9071a5c210531026f
-    )
-  endif()
-  FetchContent_GetProperties(onnxruntime)
-  if(NOT onnxruntime_POPULATED)
-    FetchContent_Populate(onnxruntime)
+    set(ORT_PKG "onnxruntime-linux-x64-1.24.1.tgz")
+    set(ORT_HASH "SHA256=9142552248b735920f9390027e4512a2cacf8946a1ffcbe9071a5c210531026f")
+    set(ORT_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/${ORT_PKG}")
   endif()
 
-  if(WIN32)
-    set(ORT_IMPORT_LIB "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib")
-    set(ORT_RUNTIME_DLL "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.dll")
+  # Allow using a pre-extracted ONNX Runtime tree (required for the GPU package
+  # on connections where the 280 MB download is unreliable) via -DORT_ROOT=...
+  if(DEFINED ORT_ROOT AND EXISTS "${ORT_ROOT}/include/onnxruntime_cxx_api.h")
+    add_library(onnxruntime_api SHARED IMPORTED GLOBAL)
+    target_include_directories(onnxruntime_api INTERFACE "${ORT_ROOT}/include")
+    if(WIN32)
+      set_target_properties(onnxruntime_api PROPERTIES
+        IMPORTED_LOCATION "${ORT_ROOT}/lib/onnxruntime.dll"
+        IMPORTED_IMPLIB "${ORT_ROOT}/lib/onnxruntime.lib")
+    else()
+      set_target_properties(onnxruntime_api PROPERTIES
+        IMPORTED_LOCATION "${ORT_ROOT}/lib/libonnxruntime.so")
+    endif()
+    message(STATUS "Using pre-extracted ONNX Runtime at ${ORT_ROOT} (CUDA=${ENABLE_ONNX_CUDA})")
   else()
-    set(ORT_IMPORT_LIB "${onnxruntime_SOURCE_DIR}/lib/libonnxruntime.so")
-  endif()
+    FetchContent_Declare(
+      onnxruntime
+      URL "${ORT_URL}"
+      URL_HASH "${ORT_HASH}"
+    )
+    FetchContent_GetProperties(onnxruntime)
+    if(NOT onnxruntime_POPULATED)
+      FetchContent_Populate(onnxruntime)
+    endif()
 
-  add_library(onnxruntime_api SHARED IMPORTED GLOBAL)
-  target_include_directories(onnxruntime_api INTERFACE "${onnxruntime_SOURCE_DIR}/include")
-  if(WIN32)
-    set_target_properties(onnxruntime_api PROPERTIES
-      IMPORTED_LOCATION "${ORT_RUNTIME_DLL}"
-      IMPORTED_IMPLIB "${ORT_IMPORT_LIB}")
-  else()
-    set_target_properties(onnxruntime_api PROPERTIES
-      IMPORTED_LOCATION "${ORT_IMPORT_LIB}")
+    if(WIN32)
+      set(ORT_IMPORT_LIB "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.lib")
+      set(ORT_RUNTIME_DLL "${onnxruntime_SOURCE_DIR}/lib/onnxruntime.dll")
+    else()
+      set(ORT_IMPORT_LIB "${onnxruntime_SOURCE_DIR}/lib/libonnxruntime.so")
+    endif()
+
+    add_library(onnxruntime_api SHARED IMPORTED GLOBAL)
+    target_include_directories(onnxruntime_api INTERFACE "${onnxruntime_SOURCE_DIR}/include")
+    if(WIN32)
+      set_target_properties(onnxruntime_api PROPERTIES
+        IMPORTED_LOCATION "${ORT_RUNTIME_DLL}"
+        IMPORTED_IMPLIB "${ORT_IMPORT_LIB}")
+    else()
+      set_target_properties(onnxruntime_api PROPERTIES
+        IMPORTED_LOCATION "${ORT_IMPORT_LIB}")
+    endif()
   endif()
 endif()
+
+# OpenSSL (required for uSockets TLS / wss:// support)
+find_package(OpenSSL REQUIRED)
 
 # uSockets (no CMakeLists — must be built manually from source)
 FetchContent_Declare(
@@ -149,7 +178,7 @@ endif()
 
 
 # Build uSockets as a static C library from source
-enable_language(C)
+enable_language(C CXX)
 
 if(WIN32)
   find_library(LIBUV_LIBRARY uv)
@@ -176,9 +205,11 @@ if(WIN32)
     ${usockets_SOURCE_DIR}/src/udp.c
     ${usockets_SOURCE_DIR}/src/bsd.c
     ${usockets_SOURCE_DIR}/src/eventing/libuv.c
+    ${usockets_SOURCE_DIR}/src/crypto/openssl.c
+    ${usockets_SOURCE_DIR}/src/crypto/sni_tree.cpp
   )
-  target_link_libraries(uSockets_lib PUBLIC ${LIBUV_LIBRARY} ws2_32 iphlpapi userenv psapi)
-  target_compile_definitions(uSockets_lib PUBLIC LIBUS_NO_SSL LIBUS_USE_LIBUV)
+  target_link_libraries(uSockets_lib PUBLIC ${LIBUV_LIBRARY} ws2_32 iphlpapi userenv psapi OpenSSL::SSL OpenSSL::Crypto)
+  target_compile_definitions(uSockets_lib PUBLIC LIBUS_USE_LIBUV LIBUS_USE_OPENSSL)
 else()
   add_library(uSockets_lib STATIC
     ${usockets_SOURCE_DIR}/src/loop.c
@@ -187,8 +218,11 @@ else()
     ${usockets_SOURCE_DIR}/src/udp.c
     ${usockets_SOURCE_DIR}/src/bsd.c
     ${usockets_SOURCE_DIR}/src/eventing/epoll_kqueue.c
+    ${usockets_SOURCE_DIR}/src/crypto/openssl.c
+    ${usockets_SOURCE_DIR}/src/crypto/sni_tree.cpp
   )
-  target_compile_definitions(uSockets_lib PUBLIC LIBUS_NO_SSL LIBUS_USE_EPOLL)
+  target_link_libraries(uSockets_lib PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+  target_compile_definitions(uSockets_lib PUBLIC LIBUS_USE_EPOLL LIBUS_USE_OPENSSL)
 endif()
 
 if(WIN32)
@@ -231,10 +265,17 @@ if(ENABLE_ONNX)
   target_compile_definitions(engine_lib PUBLIC NEXUS_HAS_ONNX=1)
   # App-local onnxruntime.dll so Windows never resolves the stale system copy.
   if(WIN32)
+    # With -DORT_ROOT the runtime DLL comes from the pre-extracted tree;
+    # otherwise from the FetchContent download.
+    if(DEFINED ORT_RUNTIME_DLL)
+      set(ORT_DLL_PATH "${ORT_RUNTIME_DLL}")
+    else()
+      set(ORT_DLL_PATH "${ORT_ROOT}/lib/onnxruntime.dll")
+    endif()
     macro(copy_ort_dll target)
       add_custom_command(TARGET ${target} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ORT_RUNTIME_DLL}"
-                $<TARGET_FILE_DIR:${target}>)
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ORT_DLL_PATH}"
+                "$<TARGET_FILE_DIR:${target}>")
     endmacro()
   endif()
 endif()

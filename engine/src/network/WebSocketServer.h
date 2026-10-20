@@ -24,10 +24,11 @@ namespace network {
 
 class WebSocketServer {
 public:
-    WebSocketServer(int port) : port_(port) {}
+    WebSocketServer(int port, std::string cert = "", std::string key = "")
+        : port_(port), cert_(std::move(cert)), key_(std::move(key)) {}
 
     void start() {
-        uWS::TemplatedApp<false>::WebSocketBehavior<int> behavior;
+        uWS::TemplatedApp<true>::WebSocketBehavior<int> behavior;
         // Compression (permessage-deflate) is disabled: the SHARED_COMPRESSOR
         // stream is a known source of "WebSocket Protocol Error 1002" closes
         // from browsers (corrupt deflate stream on MinGW/libuv builds). The
@@ -44,12 +45,12 @@ public:
                 req->getHeader("sec-websocket-extensions"),
                 context);
         };
-        behavior.open = [this](uWS::WebSocket<false, true, int> *ws) {
+        behavior.open = [this](uWS::WebSocket<true, true, int> *ws) {
             std::lock_guard<std::mutex> lock(clients_mutex_);
             clients_.push_back(ws);
             std::cout << "Client connected\n";
         };
-        behavior.message = [this](uWS::WebSocket<false, true, int> *ws, std::string_view message, uWS::OpCode opCode) {
+        behavior.message = [this](uWS::WebSocket<true, true, int> *ws, std::string_view message, uWS::OpCode opCode) {
             // Respond to client keepalive pings with pong. The pong send
             // resets the idle-timeout timer so the client stays connected
             // even when the engine is not broadcasting (e.g. city switch).
@@ -88,7 +89,7 @@ public:
                 message_handler_(payload);
             }
         };
-        behavior.close = [this](uWS::WebSocket<false, true, int> *ws, int code, std::string_view message) {
+        behavior.close = [this](uWS::WebSocket<true, true, int> *ws, int code, std::string_view message) {
             {
                 std::lock_guard<std::mutex> lock(clients_mutex_);
                 auto it = std::find(clients_.begin(), clients_.end(), ws);
@@ -103,7 +104,11 @@ public:
         thread_ = std::thread([this, behavior = std::move(behavior)]() mutable {
             uWS::Loop *loop = uWS::Loop::get();
             loop_ = loop;
-            app_ = std::make_unique<uWS::App>();
+
+            uWS::SocketContextOptions ssl_opts{};
+            if (!cert_.empty()) ssl_opts.cert_file_name = cert_.c_str();
+            if (!key_.empty()) ssl_opts.key_file_name = key_.c_str();
+            app_ = std::make_unique<uWS::SSLApp>(ssl_opts);
 
             app_->options("/*", [](auto *res, auto *req) {
                 res->writeHeader("Access-Control-Allow-Origin", "*")
@@ -281,10 +286,12 @@ private:
     }
 
     int port_;
+    std::string cert_;
+    std::string key_;
     std::thread thread_;
     std::atomic<uWS::Loop*> loop_{nullptr};
-    std::unique_ptr<uWS::App> app_;
-    std::vector<uWS::WebSocket<false, true, int>*> clients_;
+    std::unique_ptr<uWS::SSLApp> app_;
+    std::vector<uWS::WebSocket<true, true, int>*> clients_;
     std::mutex clients_mutex_;
     std::function<void(const std::string&)> message_handler_;
 

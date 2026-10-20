@@ -106,6 +106,11 @@ public:
             cmd.type = NLPActionType::SetSignalMode;
             cmd.string_value = "rl";
             return cmd;
+        } else if (lower.find("type-2") != std::string::npos
+                   || lower.find("type2") != std::string::npos) {
+            cmd.type = NLPActionType::SetSignalMode;
+            cmd.string_value = "type2_fuzzy";
+            return cmd;
         } else if (lower.find("fuzzy") != std::string::npos) {
             cmd.type = NLPActionType::SetSignalMode;
             cmd.string_value = "fuzzy";

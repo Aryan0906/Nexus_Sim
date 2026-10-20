@@ -38,6 +38,36 @@ struct InferenceEngine::Impl {
     std::optional<Ort::Session> session;
 };
 
+namespace {
+
+// True when the linked ONNX Runtime distribution carries the CUDA EP. The
+// CPU-only package returns just "CPUExecutionProvider" here.
+bool cuda_provider_available() {
+    try {
+        for (const auto& name : Ort::GetAvailableProviders()) {
+            if (name.find("CUDA") != std::string::npos) return true;
+        }
+    } catch (...) {
+        // GetAvailableProviders can throw on minimal builds; treat as CPU-only.
+    }
+    return false;
+}
+
+Ort::SessionOptions make_session_options(bool use_cuda) {
+    Ort::SessionOptions options;
+    options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    options.SetIntraOpNumThreads(1); // must not fight the sim thread pool
+    if (use_cuda) {
+        OrtCUDAProviderOptions cuda_options{};
+        cuda_options.device_id = 0;
+        cuda_options.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchExhaustive;
+        options.AppendExecutionProvider_CUDA(cuda_options);
+    }
+    return options;
+}
+
+} // namespace
+
 InferenceEngine::InferenceEngine() = default;
 InferenceEngine::~InferenceEngine() = default;
 InferenceEngine::InferenceEngine(InferenceEngine&&) noexcept = default;
@@ -45,17 +75,43 @@ InferenceEngine& InferenceEngine::operator=(InferenceEngine&&) noexcept = defaul
 
 bool InferenceEngine::load(const std::string& model_path) {
     loaded_ = false;
+    active_provider_ = "cpu";
     impl_.reset();
     obs_dim_ = 0;
     num_actions_ = 0;
+
+    const bool wants_cuda = (provider_ == "cuda" || provider_ == "auto");
+    bool use_cuda = wants_cuda && cuda_provider_available();
+    if (wants_cuda && !use_cuda) {
+        if (provider_ == "cuda") {
+            std::cerr << "[InferenceEngine] CUDA provider requested but not "
+                         "present in this ONNX Runtime build; using CPU\n";
+        } else {
+            std::cout << "[InferenceEngine] CUDA provider unavailable; using CPU\n";
+        }
+    }
+
     try {
         impl_ = std::make_unique<Impl>();
-        Ort::SessionOptions options;
-        options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-        options.SetIntraOpNumThreads(1); // must not fight the sim thread pool
-        impl_->session.emplace(impl_->env,
-                               to_ort_path(model_path).c_str(),
-                               options);
+        try {
+            impl_->session.emplace(
+                impl_->env, to_ort_path(model_path).c_str(),
+                make_session_options(use_cuda));
+        } catch (const Ort::Exception& e) {
+            if (!use_cuda) throw;
+            // Missing CUDA/cuDNN runtime DLLs or unsupported GPU: keep the
+            // engine usable by retrying the same graph on the CPU EP.
+            std::cerr << "[InferenceEngine] CUDA session init failed ("
+                      << e.what() << "); retrying on CPU\n";
+            impl_ = std::make_unique<Impl>();
+            impl_->session.emplace(
+                impl_->env, to_ort_path(model_path).c_str(),
+                make_session_options(false));
+            use_cuda = false;
+        }
+        active_provider_ = use_cuda ? "cuda" : "cpu";
+        std::cout << "[InferenceEngine] execution provider: "
+                  << active_provider_ << "\n";
 
         auto input_shape = impl_->session->GetInputTypeInfo(0)
                                .GetTensorTypeAndShapeInfo().GetShape();

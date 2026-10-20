@@ -37,6 +37,15 @@ private:
     // CV-7 / Task 26.4: Road condition factor (1.0 = normal/dry, 1.3 = wet/rain, 1.6 = hazardous)
     double road_surface_factor_ = 1.0;
 
+    // Demand inputs, refreshed by Simulation once per simulated second.
+    double queue_len_ = 0.0;
+    double wait_time_ = 0.0;
+
+    // Green extension budget for the current phase (max 15 s).
+    double extension_used_ = 0.0;
+    int last_phase_ = -1;
+    int last_state_ = -1;
+
     // Output: Green Time Extension (0s to 15s)
     // Rule outputs (extension in seconds for centroid defuzzification)
     // 3x3 matrix:
@@ -103,11 +112,40 @@ public:
         return num / den;
     }
 
+    void set_inputs(double queue_len, double wait_time) override {
+        queue_len_ = queue_len;
+        wait_time_ = wait_time;
+    }
+
+    // Adaptive green extension: when the active green is about to expire and
+    // demand warrants it, extend it by the defuzzified amount (capped at 15 s
+    // per phase). Falls back to plain Webster timing when demand is low.
     void tick(double dt) override {
         if (!controller_) return;
 
-        // In standard signal controller loop, fuzzy logic adjusts timing dynamic extension
+        const int phase = controller_->current_phase_idx;
+        const int state = static_cast<int>(controller_->current_state);
+        if (phase != last_phase_
+            || (state != last_state_
+                && controller_->current_state == SignalController::PhaseState::GREEN)) {
+            extension_used_ = 0.0;
+        }
+
+        if (controller_->current_state == SignalController::PhaseState::GREEN
+            && controller_->current_timer <= dt + 1e-9
+            && extension_used_ < 15.0) {
+            const double ext = std::clamp(
+                compute_green_extension(queue_len_, wait_time_),
+                0.0, 15.0 - extension_used_);
+            if (ext > 0.5) {
+                controller_->current_timer += ext;
+                extension_used_ += ext;
+            }
+        }
+
         controller_->tick(dt);
+        last_phase_ = controller_->current_phase_idx;
+        last_state_ = static_cast<int>(controller_->current_state);
     }
 
     bool is_green(int64_t incoming_edge_id) const override {

@@ -1,0 +1,23 @@
+$kind: http-request
+name: 'C13 - POST /incident'
+order: 3000
+method: POST
+url: '{{nlp}}/incident'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "text": "road closed at 5th avenue",
+      "city": "chicago"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('C13 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('C13 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });
+      pm.test('C13 - Has message', () => { pm.expect(pm.response.json()).to.have.property('message'); });
+      pm.test('C13 - Has incident_spec', () => { pm.expect(pm.response.json()).to.have.property('incident_spec'); });

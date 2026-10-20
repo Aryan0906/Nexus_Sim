@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'F23 - GET /data/36_algo_matrix.json'
+order: 2000
+method: GET
+url: '{{dashboard}}/data/36_algo_matrix.json'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('F23 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('F23 - total_algorithms is 48', () => { pm.expect(pm.response.json().total_algorithms).to.eql(48); });
+      pm.test('F23 - Has metrics_provenance', () => { pm.expect(pm.response.json()).to.have.property('metrics_provenance'); });

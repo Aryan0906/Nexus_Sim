@@ -1,0 +1,25 @@
+$kind: http-request
+name: 'E20 - GET /algorithms'
+order: 2000
+method: GET
+url: '{{algo}}/algorithms'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('E20 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('E20 - Returns array of 48', () => {
+        pm.expect(pm.response.json()).to.be.an('array').with.lengthOf(48);
+      });
+      pm.test('E20 - Each item has required fields', () => {
+        pm.response.json().forEach(item => {
+          pm.expect(item).to.have.property('id');
+          pm.expect(item).to.have.property('name');
+          pm.expect(item).to.have.property('category');
+          pm.expect(item).to.have.property('status');
+          pm.expect(item).to.have.property('latency_ms');
+          // 'metric' may be absent; accept either 'metric' or 'metrics'
+          const hasMetric = item.hasOwnProperty('metric') || item.hasOwnProperty('metrics');
+          pm.expect(hasMetric, 'item should have metric or metrics').to.be.true;
+        });
+      });

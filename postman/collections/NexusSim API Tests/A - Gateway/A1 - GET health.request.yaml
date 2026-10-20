@@ -1,0 +1,32 @@
+$kind: http-request
+name: 'A1 - GET /api/health'
+order: 1000
+method: GET
+url: '{{gateway}}/api/health'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('A1 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('A1 - Has services object', () => { pm.expect(pm.response.json()).to.have.property('services'); });
+      pm.test('A1 - camera is healthy', () => {
+        const s = pm.response.json().services.camera;
+        const v = (typeof s === 'object') ? s.status : s;
+        pm.expect(v).to.eql('healthy');
+      });
+      pm.test('A1 - nlp is healthy', () => {
+        const s = pm.response.json().services.nlp;
+        const v = (typeof s === 'object') ? s.status : s;
+        pm.expect(v).to.eql('healthy');
+      });
+      pm.test('A1 - event_bus is healthy', () => {
+        const s = pm.response.json().services.event_bus;
+        const v = (typeof s === 'object') ? s.status : s;
+        pm.expect(v).to.eql('healthy');
+      });
+      pm.test('A1 - algo_explorer is healthy', () => {
+        const s = pm.response.json().services.algo_explorer;
+        const v = (typeof s === 'object') ? s.status : s;
+        pm.expect(v).to.eql('healthy');
+      });
+      pm.test('A1 - engine key exists', () => { pm.expect(pm.response.json().services).to.have.property('engine'); });

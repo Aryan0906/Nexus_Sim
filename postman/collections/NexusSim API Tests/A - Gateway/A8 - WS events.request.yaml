@@ -1,0 +1,4 @@
+$kind: websocket-request
+name: 'A8 - WS ws://localhost:8000/ws/events'
+order: 8000
+url: 'ws://localhost:8000/ws/events'

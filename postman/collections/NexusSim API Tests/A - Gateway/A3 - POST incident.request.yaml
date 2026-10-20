@@ -1,0 +1,23 @@
+$kind: http-request
+name: 'A3 - POST /api/incident'
+order: 3000
+method: POST
+url: '{{gateway}}/api/incident'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "text": "accident on main street",
+      "city": "chicago"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('A3 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('A3 - Has status', () => { pm.expect(pm.response.json()).to.have.property('status'); });
+      pm.test('A3 - Has message', () => { pm.expect(pm.response.json()).to.have.property('message'); });
+      pm.test('A3 - Has incident_spec', () => { pm.expect(pm.response.json()).to.have.property('incident_spec'); });

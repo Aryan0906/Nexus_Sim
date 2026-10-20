@@ -1,0 +1,12 @@
+$kind: http-request
+name: 'B10 - GET /api/camera/feed'
+order: 2000
+method: GET
+url: '{{camera}}/api/camera/feed'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('B10 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('B10 - Content-Type is application/json', () => { pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'); });
+      pm.test('B10 - Body > 10 KB', () => { pm.expect(pm.response.responseSize).to.be.above(10240); });

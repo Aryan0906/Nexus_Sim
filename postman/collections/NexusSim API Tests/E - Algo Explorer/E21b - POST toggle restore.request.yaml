@@ -1,0 +1,22 @@
+$kind: http-request
+name: 'E21b - POST /algorithms/toggle (restore CV-1)'
+order: 4000
+method: POST
+url: '{{algo}}/algorithms/toggle'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "algo_id": "CV-1",
+      "active": true
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('E21b - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('E21b - status is updated', () => { pm.expect(pm.response.json().status).to.eql('updated'); });
+      pm.test('E21b - algo status is ACTIVE', () => { pm.expect(pm.response.json().algo.status).to.eql('ACTIVE'); });

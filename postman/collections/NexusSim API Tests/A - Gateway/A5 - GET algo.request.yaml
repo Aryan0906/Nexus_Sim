@@ -1,0 +1,15 @@
+$kind: http-request
+name: 'A5 - GET /api/algo'
+order: 5000
+method: GET
+url: '{{gateway}}/api/algo'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('A5 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('A5 - Returns 48 algorithms', () => {
+        const json = pm.response.json();
+        const arr = Array.isArray(json) ? json : json.algorithms;
+        pm.expect(arr).to.be.an('array').with.lengthOf(48);
+      });

@@ -1,0 +1,4 @@
+$kind: websocket-request
+name: 'A7 - WS ws://localhost:8000/ws'
+order: 7000
+url: 'ws://localhost:8000/ws'

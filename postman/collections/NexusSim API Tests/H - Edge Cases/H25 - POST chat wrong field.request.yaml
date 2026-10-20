@@ -1,0 +1,19 @@
+$kind: http-request
+name: 'H25 - POST /api/chat (wrong field -> 422)'
+order: 1000
+method: POST
+url: '{{gateway}}/api/chat'
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "message": "x"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('H25 - Expect 422 for wrong field', () => { pm.response.to.have.status(422); });

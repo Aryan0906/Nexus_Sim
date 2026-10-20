@@ -1,0 +1,11 @@
+$kind: http-request
+name: 'F22 - GET /'
+order: 1000
+method: GET
+url: '{{dashboard}}/'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('F22 - Status 200', () => { pm.response.to.have.status(200); });
+      pm.test('F22 - HTML contains id=root', () => { pm.expect(pm.response.text()).to.include('id="root"'); });

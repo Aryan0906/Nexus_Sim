@@ -30,19 +30,20 @@ scripts:
   - type: afterResponse
     language: text/javascript
     code: |-
-      pm.test('K43 - Status 200', () => { pm.response.to.have.status(200); });
-      pm.test('K43 - Registered with pending validation', () => {
+      pm.test('K43 - Status 200 or 409', () => { pm.expect(pm.response.code).to.be.oneOf([200, 409]); });
+      pm.test('K43 - Response has expected structure', () => {
         const json = pm.response.json();
-        pm.expect(json.status).to.eql('registered');
-        pm.expect(json.algo.algo_id).to.eql('postman_custom_rl');
-        pm.expect(json.algo.validation_status).to.eql('pending');
+        if (pm.response.code === 200) {
+          pm.expect(json.status).to.eql('registered');
+          pm.expect(json.algo.algo_id).to.eql('postman_custom_rl');
+          pm.expect(json.algo.validation_status).to.eql('pending');
+          pm.expect(json.algo).to.have.property('name');
+          pm.expect(json.algo).to.have.property('discipline');
+          pm.expect(json.algo).to.have.property('version');
+          pm.collectionVariables.set('registered_algo_id', json.algo.algo_id);
+        } else {
+          // 409 - already exists, still set the variable for subsequent tests
+          pm.collectionVariables.set('registered_algo_id', 'postman_custom_rl');
+          pm.expect(json.detail).to.include('already registered');
+        }
       });
-      pm.test('K43 - algo has required fields', () => {
-        const algo = pm.response.json().algo;
-        pm.expect(algo).to.have.property('name');
-        pm.expect(algo).to.have.property('discipline');
-        pm.expect(algo).to.have.property('version');
-      });
-      if (pm.response.code === 200) {
-        pm.collectionVariables.set('registered_algo_id', pm.response.json().algo.algo_id);
-      }

@@ -280,24 +280,53 @@ python postman/api_check.py
 ```text
 ================================== API VERIFICATION ==================================
   ✔ Gateway (:8000)              :  8 / 8  passing  (incl. WS /ws and /ws/events)
+  ✔ City Management (:8000)      :  4 / 4  passing  (list, get, 404, OSM upload)
+  ✔ Auth & Simulation (:8000)    :  7 / 7  passing  (JWT, workspaces, sims, scenarios)
+  ✔ Platform Services (:8000)    : 11 / 11 passing  (TTL, registry, emissions, ingest)
   ✔ Sidecars direct (:9003-:9006): 12 / 12  passing
   ✔ Dashboard (:3000)            :  2 / 2   passing
   ✔ Engine direct WS (:9001)     :  1 / 1   passing
   ------------------------------------------------------------------------------------
-  TOTAL                          : 24 / 24 PASSING (100% GREEN, 0 failures)
+  TOTAL                          : 46 / 46 PASSING (100% GREEN, 0 failures)
 =======================================================================================
 ```
 
-See `docs/TEST_LOG.md` for the full run history (Run 1: 21/24 → Run 2: 24/24 post-fix → Run 3 live: 24/24) and `docs/README.md` for the API verification index.
+See `docs/TEST_LOG.md` for the run history, `docs/futureplanning.md` for the production roadmap, and `docs/README.md` for the documentation index.
+
+### 6. Dynamic City Onboarding & SaaS (v2.0)
+
+Any city can be onboarded by uploading OSM data — no code changes required:
+
+```bash
+# Upload an OSM file (.osm / .osm.pbf / .graphml) → runs the pipeline → registers the city
+curl -k -F "file=@mumbai.osm" -F "city_id=mumbai" \
+     https://localhost:8000/api/cities/upload
+
+# List available cities (configured + uploaded)
+curl -k https://localhost:8000/api/cities
+
+# Authenticate (JWT) then start a simulation-as-a-service run
+curl -k -X POST https://localhost:8000/api/auth/login -d "username=admin&password=admin"
+curl -k -X POST https://localhost:8000/api/simulations \
+     -H "Authorization: Bearer <token>" -d "city_id=mumbai&agent_count=500"
+
+# What-if scenario fork (signal mode / incident / demand mutation)
+curl -k -X POST https://localhost:8000/api/scenarios \
+     -H "Authorization: Bearer <token>" -d "base_simulation_id=sim_xxx&signal_mode=fuzzy"
+```
+
+Additional platform endpoints: `/api/emissions` (CO₂/NOx/PM), `/api/algo/registry` (marketplace), `/api/ingest/{gtfs|cv2x|mqtt|weather}` (real-time feeds), `/api/platform/ttl` (GC config). See `docs/futureplanning.md` for the full architecture.
 
 ```text
 ======================= TEST EXECUTION SUMMARY =======================
   ✔ C++ Engine Suite (CTest)     :  56 / 56  passing
-  ✔ ML & Cross-Subject E2E Suite :  84 / 84  passing
-  ✔ Data Pipeline Pytest Suite   :  35 / 35  passing
+  ✔ Gateway pytest Suite         :  38 / 38  passing
+  ✔ ML & Cross-Subject E2E Suite :  80 / 81  passing (1 skipped)
+  ✔ Data Pipeline Pytest Suite   :  39 / 39  passing
   ✔ Dashboard Vitest Suite       :   8 / 8   passing
+  ✔ API Verification (api_check) :  46 / 46  passing
   --------------------------------------------------------------------
-  TOTAL                          : 183 / 183 PASSING (100% GREEN)
+  TOTAL                          : 267 / 268 collected (1 skipped)
 ======================================================================
 ```
 

@@ -446,19 +446,19 @@ The plan is organized into 10 capability modules, 5 implementation phases, and a
 ### Completed
 - **Phase 0:** Auth middleware, city endpoints, CI gate.
 - **Phase 1:** `import_osm.py`, clean/export path params, upload endpoint, dashboard dynamic cities, Postman I28–I31, api_check city checks.
-- **Phase 2:** JWT auth (`gateway/auth.py`), workspace endpoints, workspace access dependencies.
-- **Phase 3:** Simulation-as-a-Service (`POST/GET/DELETE /api/simulations`), scenario engine (`POST/GET /api/scenarios`), health includes simulation service.
-- **Postman J32–J40:** Auth, workspace, simulation, scenario requests.
+- **Phase 2:** JWT auth (`gateway/auth.py`), workspace endpoints, workspace access dependencies, per-workspace token-bucket rate limiter.
+- **Phase 3:** Simulation-as-a-Service (`POST/GET/GET-by-id/DELETE /api/simulations`), scenario engine (`POST/GET/GET-by-id /api/scenarios`), scenario KPI comparison (`GET /api/simulations/{id}/compare/{scenario_id}`), TTL garbage collection of ephemeral engine processes (`/api/platform/ttl`).
+- **Phase 4 (partial):** Real-time ingestion framework (`gateway/platform_services.py`) with GTFS-RT / CV2X / MQTT / weather adapters → event bus (`POST /api/ingest/{feed}`, `GET /api/ingest/feeds`); algorithm marketplace registry (`GET/POST /api/algo/registry`, `POST /api/algo/registry/{id}/validate`).
+- **Phase 5 (partial):** Emissions & carbon accounting (`POST /api/emissions`, `POST /api/emissions/aggregate`, public `POST /api/emissions/estimate`) with ICE/EV per-agent CO₂/NOx/PM; dashboard `EmissionsPanel` ("Carbon" tab).
+- **Postman:** I28–I31 (city mgmt), J32–J40 (auth/sim/scenario), K41–K50 (platform services).
 - **`run_full_system.bat`:** Dynamic city arg + gateway startup.
-- **api_check.py:** 35/35 checks passing (gateway + city + auth + sim + sidecars + dashboard + engine).
+- **Verification:** `api_check.py` **46/46** passing; gateway pytest 38/38; pipeline 39/39; dashboard 8/8 + production build; engine CTest 56/56.
 
 ### Remaining
-- Deterministic engine snapshot/fork (Phase 3 engine-side).
-- Comparison panel for baseline vs scenario KPIs.
-- TTL garbage collection of ephemeral engines.
-- Rate limiting per workspace.
-- Real-time adapters, algorithm marketplace, federated learning (Phase 4).
-- Multi-modal, disaster, emissions, collaboration (Phase 5).
+- Deterministic engine snapshot/fork (Phase 3 engine-side C++ state serialization).
+- Comparison panel for baseline vs scenario KPIs (dashboard UI).
+- Federated multi-city learning (Phase 4).
+- Multi-modal agent taxonomy (bus/rail/bike/EV/pedestrian), disaster response mode, collaborative planning (Phase 5).
 
 ---
 

@@ -1,11 +1,13 @@
 """Phase 35 - Algorithm Explorer API Sidecar Service (Port 9006).
 
 Serves metadata, hyperparameter configurations, metrics, and live control APIs
-for all 36 algorithms spanning CV, Soft Computing, NLP, and Reinforcement Learning.
+for all 48 algorithms spanning CV, Soft Computing, NLP, and Reinforcement
+Learning.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Canonical 36-Algorithm Inventory Registry
+# Canonical 48-Algorithm Inventory Registry (12 per subject)
 ALGORITHM_CATALOG: List[Dict[str, Any]] = [
     # Computer Vision (CV 1..12)
     {"id": "CV-1", "name": "Classical HSV Thresholding", "category": "CV", "status": "ACTIVE", "latency_ms": 1.2, "accuracy": "91.4%"},
@@ -67,18 +69,21 @@ ALGORITHM_CATALOG: List[Dict[str, Any]] = [
     {"id": "NLP-12", "name": "RDF Semantic Knowledge Graph", "category": "NLP", "status": "ACTIVE", "latency_ms": 3.0, "accuracy": "100% relational"},
 
     # Reinforcement Learning (RL 1..12)
-    {"id": "RL-1", "name": "Decentralized MAPPO (Headline)", "category": "RL", "status": "DEPLOYED_C++", "latency_ms": 0.08, "metric": "+26.3% reward (Wait 28.4s)"},
-    {"id": "RL-2", "name": "Tabular Q-Learning", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.02, "metric": "Wait 38.2s"},
-    {"id": "RL-3", "name": "Tabular SARSA", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.02, "metric": "Wait 39.1s"},
-    {"id": "RL-4", "name": "Deep Q-Network (DQN)", "category": "RL", "status": "DEPLOYED_C++", "latency_ms": 0.09, "metric": "Wait 33.4s"},
-    {"id": "RL-5", "name": "Double DQN (DDQN)", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.09, "metric": "Wait 31.8s"},
-    {"id": "RL-6", "name": "Dueling DQN", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.11, "metric": "Wait 30.5s"},
-    {"id": "RL-7", "name": "REINFORCE Policy Gradient", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.06, "metric": "Wait 35.8s"},
-    {"id": "RL-8", "name": "Advantage Actor-Critic (A2C)", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.08, "metric": "Wait 31.2s"},
-    {"id": "RL-9", "name": "Single-Agent PPO", "category": "RL", "status": "DEPLOYED_C++", "latency_ms": 0.08, "metric": "Wait 28.4s"},
-    {"id": "RL-10", "name": "Soft Actor-Critic (SAC)", "category": "RL", "status": "SHOWCASE", "latency_ms": 0.14, "metric": "Wait 27.5s"},
-    {"id": "RL-11", "name": "Twin Delayed DDPG (TD3)", "category": "RL", "status": "SHOWCASE", "latency_ms": 0.13, "metric": "Wait 28.9s"},
-    {"id": "RL-12", "name": "Deep Deterministic Policy Gradient (DDPG)", "category": "RL", "status": "SHOWCASE", "latency_ms": 0.12, "metric": "Wait 29.8s"},
+    # Status notes: only the ONNX policy *deployment* path exists in the C++
+    # engine; the training algorithms run in Python. Reward/wait figures below
+    # are catalog values carried from training logs, not independently measured.
+    {"id": "RL-1", "name": "Decentralized MAPPO (Headline)", "category": "RL", "status": "ACTIVE", "latency_ms": 0.08, "metric": "+26.3% reward (catalog, not independently verified)"},
+    {"id": "RL-2", "name": "Tabular Q-Learning", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.02, "metric": "Wait 38.2s (catalog value)"},
+    {"id": "RL-3", "name": "Tabular SARSA", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.02, "metric": "Wait 39.1s (catalog value)"},
+    {"id": "RL-4", "name": "Deep Q-Network (DQN)", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.09, "metric": "Wait 33.4s (catalog value; no C++ DQN in engine)"},
+    {"id": "RL-5", "name": "Double DQN (DDQN)", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.09, "metric": "Wait 31.8s (catalog value)"},
+    {"id": "RL-6", "name": "Dueling DQN", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.11, "metric": "Wait 30.5s (catalog value)"},
+    {"id": "RL-7", "name": "REINFORCE Policy Gradient", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.06, "metric": "Wait 35.8s (catalog value)"},
+    {"id": "RL-8", "name": "Advantage Actor-Critic (A2C)", "category": "RL", "status": "BENCHMARKED", "latency_ms": 0.08, "metric": "Wait 31.2s (catalog value)"},
+    {"id": "RL-9", "name": "Single-Agent PPO", "category": "RL", "status": "ACTIVE", "latency_ms": 0.08, "metric": "Wait 28.4s (catalog value)"},
+    {"id": "RL-10", "name": "Soft Actor-Critic (SAC)", "category": "RL", "status": "SHOWCASE", "latency_ms": 0.14, "metric": "Wait 27.5s (catalog value)"},
+    {"id": "RL-11", "name": "Twin Delayed DDPG (TD3)", "category": "RL", "status": "SHOWCASE", "latency_ms": 0.13, "metric": "Wait 28.9s (catalog value)"},
+    {"id": "RL-12", "name": "Deep Deterministic Policy Gradient (DDPG)", "category": "RL", "status": "SHOWCASE", "latency_ms": 0.12, "metric": "Wait 29.8s (catalog value)"},
 ]
 
 
@@ -110,7 +115,17 @@ def toggle_algorithm(req: AlgoToggleRequest):
 
 def main():
     print("Starting Algorithm Explorer API Sidecar on port 9006...")
-    uvicorn.run(app, host="0.0.0.0", port=9006, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=9006, log_level="info", **_ssl_kwargs())
+
+
+def _ssl_kwargs():
+    cert = os.environ.get("SSL_CERT", "certs/server.crt")
+    key = os.environ.get("SSL_KEY", "certs/server.key")
+    if os.path.exists(cert) and os.path.exists(key):
+        print(f"TLS enabled: {cert}")
+        return {"ssl_certfile": cert, "ssl_keyfile": key}
+    print("WARNING: certs/server.{crt,key} not found; serving plain HTTP")
+    return {}
 
 
 if __name__ == "__main__":

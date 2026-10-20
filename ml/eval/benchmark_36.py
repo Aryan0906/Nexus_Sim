@@ -1,7 +1,11 @@
-"""Phase 36 - Complete 36-Algorithm Evaluation & Benchmark Suite.
+"""Phase 36 - Complete 48-Algorithm Evaluation & Benchmark Suite.
 
-Executes and audits all 36 algorithms across Computer Vision, Soft Computing,
-NLP, and Reinforcement Learning, outputting ml/results/36_algo_matrix.json.
+Generates the 48-algorithm inventory matrix (12 each across CV, Soft
+Computing, NLP, and RL) from the canonical catalog in
+sidecars/algo_explorer_service.py, outputting ml/results/36_algo_matrix.json.
+
+Note: the file name is kept for backward compatibility with the dashboard
+fetch path; the catalog contains 48 algorithms.
 """
 
 from __future__ import annotations
@@ -30,12 +34,21 @@ def generate_benchmark_matrix() -> dict:
             "Natural Language Processing": [a for a in ALGORITHM_CATALOG if a["category"] == "NLP"],
             "Reinforcement Learning": [a for a in ALGORITHM_CATALOG if a["category"] == "RL"],
         },
+        # Honest status: per-algorithm latency/accuracy/metric fields in the
+        # catalog are design targets unless explicitly labelled "(measured)".
+        # Verified measurements come from the engine benchmark binaries.
         "performance_summary": {
-            "fastest_subsystem": "Reinforcement Learning C++ ONNX (0.08 ms p95)",
-            "most_accurate_cv": "Blob & Contour Detector (97.5%)",
-            "best_calibration_optimizer": "CMA-ES (16.2% MAPE)",
-            "highest_rl_throughput": "Decentralized MAPPO (+26.3% reward gain)",
+            "fastest_subsystem": "C++ ONNX policy inference, 0.04-0.13 ms p95 (engine bench_inference, measured range)",
+            "most_accurate_cv": "Not independently measured; CV detectors are classical/surrogate (no real YOLO/U-Net/Mask R-CNN weights in repo)",
+            "best_calibration_optimizer": "Not measured; MAPE figures in the catalog are design targets",
+            "highest_rl_throughput": "Not measured; reward-gain figures in the catalog are training-log claims",
         },
+        "metrics_provenance": (
+            "Per-algorithm latency_ms/accuracy/metric values are catalog "
+            "design targets unless suffixed '(measured)'. Verified numbers: "
+            "engine bench_inference (ONNX policy), bench_quadtree/spatial "
+            "(index speedup), and the engine --profile phase breakdown."
+        ),
     }
 
     out_file = os.path.join(ML_DIR, "results", "36_algo_matrix.json")
@@ -49,7 +62,7 @@ def generate_benchmark_matrix() -> dict:
     with open(dash_file, "w") as f:
         json.dump(summary, f, indent=2)
 
-    print(f"36-Algorithm Master Matrix written to {out_file} and synced to dashboard/public.")
+    print(f"48-Algorithm Master Matrix written to {out_file} and synced to dashboard/public.")
     return summary
 
 

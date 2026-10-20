@@ -31,6 +31,7 @@ from env.graph_loader import load_graph_json
 from models import PolicyNetwork, ValueNetwork
 from train.ppo import compute_gae_batched, ppo_update
 from train.rollout import collect_episode, evaluate_fixed_baseline
+from train.device import resolve_device, describe_device
 
 _CPU = os.environ.get("NEXUS_TORCH_THREADS", "1")
 torch.set_num_threads(int(_CPU))
@@ -64,7 +65,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", default=None, help="path or 'latest'")
     parser.add_argument("--baseline-episodes", type=int, default=10)
     parser.add_argument("--experiment", default=None)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default="auto",
+                        help="'auto' (default) uses CUDA when available, else CPU; "
+                             "or pass cpu / cuda / cuda:N")
     parser.add_argument(
         "--reward-scale", type=float, default=0.0,
         help="divisor for per-step rewards before GAE/PPO so returns are O(1); "
@@ -100,7 +103,8 @@ def main() -> None:
     args = parse_args()
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    device = torch.device(args.device)
+    device = resolve_device(args.device)
+    print("Training device:", describe_device(device))
 
     graph = build_toy_graph()
     if args.city != "toy":

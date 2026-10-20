@@ -76,12 +76,14 @@ def run_benchmark(trainers, episodes=50):
         eval_res = trainer.evaluate(episodes=10)
         elapsed = time.time() - t0
 
+        mw = eval_res.get("mean_wait")
         results[trainer.algo_name] = {
             "mean_reward": round(eval_res["mean_reward"], 2),
-            "mean_wait": round(eval_res["mean_wait"], 1),
+            "mean_wait": round(mw, 1) if mw is not None else None,
             "training_time_s": round(elapsed, 2),
         }
-        print(f"[{trainer.algo_name}] Mean Reward: {eval_res['mean_reward']:.2f}, Avg Wait: {eval_res['mean_wait']:.1f}s ({elapsed:.1f}s)")
+        mw_txt = f"{mw:.1f}s" if mw is not None else "n/a (not measured)"
+        print(f"[{trainer.algo_name}] Mean Reward: {eval_res['mean_reward']:.2f}, Avg Wait: {mw_txt} ({elapsed:.1f}s)")
 
     return results
 

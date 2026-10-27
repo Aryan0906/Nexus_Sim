@@ -12,6 +12,22 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 
+# Minibatch sizing. The recorded 1024 suits the small graphs: a toy update
+# holds a few thousand samples, so 1024 gives a handful of gradient steps per
+# epoch. A city-graph update holds hundreds of thousands of samples, and
+# 1024-sample minibatches then make the update launch-bound - thousands of
+# tiny kernels with the GPU mostly idle. Scaling the minibatch with the
+# sample count keeps the GPU busy and leaves the small graphs unchanged.
+_MIN_BATCH_SIZE = 1024
+_MAX_BATCH_SIZE = 16384
+_BATCH_SAMPLE_DIVISOR = 32
+
+
+def auto_batch_size(n_samples: int) -> int:
+    """Return the minibatch size to use for an update of ``n_samples`` samples."""
+    return min(_MAX_BATCH_SIZE,
+               max(_MIN_BATCH_SIZE, n_samples // _BATCH_SAMPLE_DIVISOR))
+
 
 def compute_gae(
     rewards: torch.Tensor,
@@ -74,14 +90,20 @@ def ppo_update(
     entropy_coef: float = 0.01,
     value_coef: float = 0.5,
     n_epochs: int = 4,
-    batch_size: int = 1024,
+    batch_size: int | None = None,
 ) -> tuple:
-    """Run clipped PPO updates over one rollout; returns (policy, value) loss."""
+    """Run clipped PPO updates over one rollout; returns (policy, value) loss.
+
+    ``batch_size=None`` picks the minibatch size from the sample count with
+    :func:`auto_batch_size`.
+    """
     adv = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
     policy_loss = value_loss = 0.0
     n = len(obs)
+    if batch_size is None:
+        batch_size = auto_batch_size(n)
     for _ in range(n_epochs):
-        perm = torch.randperm(n)
+        perm = torch.randperm(n, device=obs.device)
         for start in range(0, n, batch_size):
             idx = perm[start : start + batch_size]
             o, a = obs[idx], actions[idx]

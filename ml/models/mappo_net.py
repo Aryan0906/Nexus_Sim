@@ -1,6 +1,6 @@
 """Policy and value networks for the shared-weight MARL agents (TR-ML-05).
 
-Both networks are 3-layer MLPs (TECH_STACK.md §Subsystem 3) shared across all
+Both networks are 3-layer MLPs (docs/NEXUS-SIM-DOCUMENTATION.md §4.6) shared across all
 intersection agents. The policy outputs a categorical distribution over
 ``{EXTEND, SWITCH}``; the value network regresses the expected return for GAE.
 """

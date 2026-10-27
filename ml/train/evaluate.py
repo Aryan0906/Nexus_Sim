@@ -24,8 +24,8 @@ if ML_DIR not in sys.path:
 from env import NexusSimEnv, build_toy_graph
 from env.graph_loader import load_graph_json
 from models import PolicyNetwork, ValueNetwork
+from train.device import describe_device, resolve_device
 from train.rollout import evaluate_fixed_baseline
-from train.device import resolve_device
 
 
 def _load_env(city: str, episode_steps: int = 100) -> NexusSimEnv:
@@ -75,11 +75,12 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=20)
     parser.add_argument("--checkpoint", default=None,
                         help="Path to MARL checkpoint (.pt); omit for baseline-only")
-    parser.add_argument("--device", default="auto",
-                        help="'auto' (default) uses CUDA when available, else CPU")
+    parser.add_argument("--device", default=os.environ.get("NEXUS_DEVICE", "auto"),
+                        help="compute device: auto (CUDA when available, else "
+                             "CPU), cpu, cuda or cuda:N")
     args = parser.parse_args()
     device = resolve_device(args.device)
-    print("Evaluation device:", device)
+    print("Device:", describe_device(device))
 
     rows = []
     for city in args.cities:

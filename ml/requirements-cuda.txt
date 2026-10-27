@@ -1,0 +1,12 @@
+# CUDA (GPU) install for the NexusSim ML pipeline.
+#
+#     pip install -r requirements-cuda.txt
+#
+# The local version label "+cu130" only exists on the PyTorch CUDA index, so
+# pip must take the CUDA wheel even though PyPI also publishes 2.12.0.
+# Requires an NVIDIA driver that supports CUDA 13.0 (driver 580 or newer).
+# Other CUDA builds: cu128, cu129, cu131 - check
+# https://pytorch.org/get-started/locally/ for the matching index URL.
+--extra-index-url https://download.pytorch.org/whl/cu130
+-r requirements.txt
+torch==2.12.0+cu130

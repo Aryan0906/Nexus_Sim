@@ -1,7 +1,7 @@
 """Reward terms for the MARL signal-control agents (TR-ML-04, US-E03).
 
 The per-agent reward is a weighted combination of a local pressure term and a
-network-wide equity term (TECH_STACK.md §Subsystem 3):
+network-wide equity term (docs/NEXUS-SIM-DOCUMENTATION.md §4.6):
 
     reward_i = alpha * pressure_i + beta * equity_global
 

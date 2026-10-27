@@ -30,7 +30,7 @@
   NexusSim models real road topologies from <b>OpenStreetMap</b>, simulates tens of thousands of heterogeneous vehicles with physics-based car-following, executes decentralized AI signal control, measures algorithmic equity, and integrates a unified <b>48-algorithm portfolio</b> across <b>Reinforcement Learning, Soft Computing, Computer Vision, and Natural Language Processing</b>.
 </p>
 
-[Quickstart](#quickstart) • [Architecture](#architecture) • [Algorithm Portfolio](#48-algorithm-portfolio) • [Multi-City Benchmarks](#multi-city-benchmarks) • [Testing](#testing) • [Documentation](docs/)
+[Quickstart](#quickstart) • [Architecture](#architecture) • [Algorithm Portfolio](#48-algorithm-portfolio) • [Multi-City Benchmarks](#multi-city-benchmarks) • [Testing](#testing) • [Documentation](docs/) • [Comprehensive Spec](docs/NEXUS-SIM-DOCUMENTATION.md)
 
 ---
 
@@ -196,6 +196,9 @@ Empirical performance evaluation comparing the learned multi-agent policy (MAPPO
 ```bat
 :: Builds engine, starts dashboard at localhost:3000, and launches Piedmont demo
 run.bat
+
+:: Or train the MAPPO signal-control policy on GPU and run the engine with it
+run.bat --train --train-city piedmont --train-device cuda
 
 :: Or launch the complete multi-service stack with all sidecars
 run_full_system.bat

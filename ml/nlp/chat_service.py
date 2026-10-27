@@ -8,6 +8,7 @@ literals. Incident reports are forwarded to the engine over the same WebSocket
 protocol so they mutate the running simulation.
 """
 
+import argparse
 import json
 import os
 import re
@@ -18,6 +19,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
+
+DEFAULT_CITY = "chicago"
 
 try:
     import websocket  # websocket-client
@@ -76,7 +79,7 @@ METRICS = MetricsCache()
 ENGINE_WS_URL = os.environ.get("NEXUS_ENGINE_WS", "ws://localhost:9001")
 
 
-def _ws_client_loop():
+def _ws_client_loop(city=DEFAULT_CITY):
     """Background WebSocket client to the engine; caches the latest state frame."""
     if not HAS_WS_CLIENT:
         print("[chat_service] websocket-client not installed; live metrics disabled")
@@ -86,7 +89,7 @@ def _ws_client_loop():
             ws = websocket.create_connection(ENGINE_WS_URL, timeout=5)
             # Subscribe to a city so the engine starts streaming.
             try:
-                ws.send(json.dumps({"type": "city", "city": "chicago"}))
+                ws.send(json.dumps({"type": "city", "city": city}))
             except Exception:
                 pass
             ws.settimeout(10)
@@ -108,18 +111,18 @@ def _ws_client_loop():
         time.sleep(2)
 
 
-def start_ws_client():
+def start_ws_client(city=DEFAULT_CITY):
     if HAS_WS_CLIENT:
-        t = threading.Thread(target=_ws_client_loop, daemon=True)
+        t = threading.Thread(target=_ws_client_loop, args=(city,), daemon=True)
         t.start()
-        print(f"[chat_service] engine WS client -> {ENGINE_WS_URL}")
+        print(f"[chat_service] engine WS client -> {ENGINE_WS_URL} (city={city})")
     else:
         print("[chat_service] websocket-client unavailable; using static answers")
 
 
 class ChatRequest(BaseModel):
     query: str
-    city: str = "chicago"
+    city: str = DEFAULT_CITY
 
 
 def _worst_zone(cache_snapshot):
@@ -260,7 +263,7 @@ def chat_endpoint(req: ChatRequest):
 
 class IncidentRequest(BaseModel):
     text: str
-    city: str = "chicago"
+    city: str = DEFAULT_CITY
 
 
 @app.post("/incident")
@@ -278,7 +281,7 @@ def incident_endpoint(req: IncidentRequest):
 
 class FeedbackRequest(BaseModel):
     text: str
-    city: str = "chicago"
+    city: str = DEFAULT_CITY
 
 
 @app.post("/feedback")
@@ -307,7 +310,10 @@ def feedback_endpoint(req: FeedbackRequest):
 
 
 def main():
-    start_ws_client()
+    parser = argparse.ArgumentParser(description="NexusSim NLP Chat & Incident Sidecar")
+    parser.add_argument("--city", default=DEFAULT_CITY, help="City to simulate (default: chicago)")
+    args = parser.parse_args()
+    start_ws_client(args.city)
     print("Starting NLP Chat & Incident Sidecar Service on port 9004...")
     uvicorn.run(app, host="0.0.0.0", port=9004, log_level="info", **_ssl_kwargs())
 

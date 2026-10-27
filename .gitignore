@@ -81,4 +81,6 @@ gateway_startup.log
 * (z-lib.org).md
 A Philosophy of Software Design by John Ousterhout.md
 systems-performance-enterprise-and-the-cloud-by-brendan-gregg*.md
+run_output.txt
+logs/
 

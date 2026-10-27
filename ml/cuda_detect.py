@@ -115,4 +115,13 @@ class CudaEnv:
 
 
 if __name__ == "__main__":
-    print(CudaEnv.probe().summary())
+    import sys
+    env = CudaEnv.probe()
+    if "--export-bat" in sys.argv:
+        idx = sys.argv.index("--export-bat")
+        if idx + 1 < len(sys.argv):
+            out_path = sys.argv[idx + 1]
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(f"set \"ORT_PROVIDER={env.recommended_onnx_provider}\"\n")
+                f.write(f"set \"TRAIN_DEVICE_DEFAULT={env.recommended_device}\"\n")
+    print(env.summary())

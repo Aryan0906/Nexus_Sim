@@ -114,31 +114,28 @@ echo.
 REM ensure OpenSSL/zlib DLLs are on PATH (needed by engine.exe)
 set PATH=C:\msys64\mingw64\bin;%PATH%
 
-REM copy required runtime DLLs next to engine.exe (if it exists)
+REM copy required runtime DLLs next to engine.exe (only if not already present)
 if exist engine\build\engine.exe (
-    if exist "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" engine\build\ >nul
-    if exist "C:\msys64\mingw64\bin\libssl-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libssl-3-x64.dll" engine\build\ >nul
-    if exist "C:\msys64\mingw64\bin\zlib1.dll" copy /Y "C:\msys64\mingw64\bin\zlib1.dll" engine\build\ >nul
-    for %%d in ("engine\build\onnxruntime.dll") do if exist "%%d" copy /Y "%%d" engine\build\ >nul
+    if not exist "engine\build\libcrypto-3-x64.dll" if exist "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" "engine\build\" >nul
+    if not exist "engine\build\libssl-3-x64.dll" if exist "C:\msys64\mingw64\bin\libssl-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libssl-3-x64.dll" "engine\build\" >nul
+    if not exist "engine\build\zlib1.dll" if exist "C:\msys64\mingw64\bin\zlib1.dll" copy /Y "C:\msys64\mingw64\bin\zlib1.dll" "engine\build\" >nul
 )
 
 echo [0/6] Probing CUDA / GPU...
 set "PY_CMD=.venv\Scripts\python.exe"
 if not exist "!PY_CMD!" set "PY_CMD=python"
 
-REM Unified probe via cuda_detect.py (PyTorch, ONNX Runtime, OpenCV)
-!PY_CMD! ml/cuda_detect.py 2>nul || echo "  [WARN] cuda_detect.py not available"
-
-REM Determine engine ONNX provider from probe
 set "ORT_PROVIDER=cpu"
-for /f "tokens=* delims=" %%a in ('!PY_CMD! -c "from ml.cuda_detect import CudaEnv; e=CudaEnv.probe(); print(e.recommended_onnx_provider)" 2>nul') do set "ORT_PROVIDER=%%a"
-echo   Engine ONNX provider: !ORT_PROVIDER!
-
-REM Determine training device from probe
 set "TRAIN_DEVICE_DEFAULT=cpu"
-for /f "tokens=* delims=" %%a in ('!PY_CMD! -c "from ml.cuda_detect import CudaEnv; e=CudaEnv.probe(); print(e.recommended_device)" 2>nul') do set "TRAIN_DEVICE_DEFAULT=%%a"
+set "GPU_BAT=%TEMP%\nexus_gpu_%RANDOM%.bat"
+!PY_CMD! ml\cuda_detect.py --export-bat "!GPU_BAT!"
+if exist "!GPU_BAT!" (
+    call "!GPU_BAT!"
+    del "!GPU_BAT!" >nul 2>&1
+)
 if "%CUDA_AVAILABLE%"=="1" set "TRAIN_DEVICE_DEFAULT=cuda"
-echo   Training device: %TRAIN_DEVICE_DEFAULT%
+echo   Engine ONNX provider: !ORT_PROVIDER!
+echo   Training device:      !TRAIN_DEVICE_DEFAULT!
 echo.
 
 REM ---------------------- build ---------------------------------------
@@ -169,12 +166,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM copy runtime DLLs next to engine.exe
+REM copy runtime DLLs next to engine.exe (only if not already present)
 if exist engine\build\engine.exe (
-    if exist "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" engine\build\ >nul
-    if exist "C:\msys64\mingw64\bin\libssl-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libssl-3-x64.dll" engine\build\ >nul
-    if exist "C:\msys64\mingw64\bin\zlib1.dll" copy /Y "C:\msys64\mingw64\bin\zlib1.dll" engine\build\ >nul
-    for %%d in ("engine\build\onnxruntime.dll") do if exist "%%d" copy /Y "%%d" engine\build\ >nul
+    if not exist "engine\build\libcrypto-3-x64.dll" if exist "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" "engine\build\" >nul
+    if not exist "engine\build\libssl-3-x64.dll" if exist "C:\msys64\mingw64\bin\libssl-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libssl-3-x64.dll" "engine\build\" >nul
+    if not exist "engine\build\zlib1.dll" if exist "C:\msys64\mingw64\bin\zlib1.dll" copy /Y "C:\msys64\mingw64\bin\zlib1.dll" "engine\build\" >nul
 )
 
 cd ..\..
@@ -219,8 +215,19 @@ REM ---------------------- run system ----------------------------------
 echo.
 echo [4/5] Starting services...
 
+if not exist "logs" mkdir "logs"
+
+REM Clean up any stale running instances to release log file locks and ports
+taskkill /F /IM engine.exe >nul 2>&1
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8000,9001,9003,9004,9005,9006,3000 -ErrorAction SilentlyContinue | ForEach-Object { if ($_.OwningProcess -gt 0) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; exit 0" >nul 2>&1
+
+REM Ensure dev TLS certificates are available
+if not exist "certs\server.crt" if exist "scripts\gen_certs.bat" (
+    call scripts\gen_certs.bat >nul 2>&1
+)
+
 REM 1. C++ Simulation Engine (WS :9001)
-echo   [1/4] C++ Simulation Engine (WS :9001)...
+echo   [1/7] C++ Simulation Engine (WS :9001)...
 if exist engine\build\engine.exe (
     set "ENGINE_ARGS=--city %CITY% --port 9001 --onnx-provider !ORT_PROVIDER!"
     if exist certs\server.crt if exist certs\server.key set "ENGINE_ARGS=!ENGINE_ARGS! --ssl-cert certs\server.crt --ssl-key certs\server.key"
@@ -241,45 +248,58 @@ if exist engine\build\engine.exe (
 )
 
 REM 2. Unified API Gateway (:8000)
-echo   [2/4] Unified API Gateway (:8000)...
+echo   [2/7] Unified API Gateway (:8000)...
 start /b "" cmd /c "!PY_CMD! -m gateway.server > logs\gateway.log 2>&1"
 echo     backgrounded -> logs\gateway.log
 
 REM 3. CV Virtual Camera (:9003)
-echo   [3/4] CV Virtual Camera (:9003)...
+echo   [3/7] CV Virtual Camera (:9003)...
 start /b "" cmd /c "!PY_CMD! ml\cv\virtual_camera_service.py > logs\camera.log 2>&1"
 echo     backgrounded -> logs\camera.log
 
 REM 4. NLP Chat & Incident Sidecar (:9004)
-echo   [4/4] NLP Chat & Incident Sidecar (:9004)...
-start /b "" cmd /c "!PY_CMD! ml\nlp\chat_service.py > logs\nlp.log 2>&1"
+echo   [4/7] NLP Chat ^& Incident Sidecar (:9004)...
+start /b "" cmd /c "!PY_CMD! ml\nlp\chat_service.py --city %CITY% > logs\nlp.log 2>&1"
 echo     backgrounded -> logs\nlp.log
 
 REM 5. Cross-Subject Event Bus (:9005)
-echo   [5/5] Cross-Subject Event Bus (:9005)...
+echo   [5/7] Cross-Subject Event Bus (:9005)...
 start /b "" cmd /c "!PY_CMD! pipeline\src\event_bus.py > logs\eventbus.log 2>&1"
 echo     backgrounded -> logs\eventbus.log
 
 REM 6. Algorithm Explorer API Sidecar (:9006)
-echo   [6/6] Algorithm Explorer API (:9006)...
+echo   [6/7] Algorithm Explorer API (:9006)...
 start /b "" cmd /c "!PY_CMD! ml\sidecars\algo_explorer_service.py > logs\algo.log 2>&1"
 echo     backgrounded -> logs\algo.log
+
+REM 7. React Dashboard (:3000)
+echo   [7/7] React Dashboard (:3000)...
+if exist "dashboard\package.json" (
+    start /b "" cmd /c "cd dashboard && npm run dev > ..\logs\dashboard.log 2>&1"
+    echo     backgrounded -> logs\dashboard.log
+)
 
 echo.
 echo ====================================================================
 echo   All NexusSim services started (single window; logs in logs\).
 echo ====================================================================
 echo   Default city:      %CITY%
-echo   Engine WS:         ws://localhost:9001
+echo   Engine WS:         wss://localhost:9001
 echo   Gateway:           https://localhost:8000
-echo   Dashboard:         http://localhost:3000  (run: cd dashboard && npm run dev)
+echo   Dashboard:         https://localhost:3000
 echo   API docs:          https://localhost:8000/docs
 echo   Logs:              logs\
 echo   ONNX provider:     !ORT_PROVIDER!
 echo ====================================================================
-echo   Services run backgrounded; this window stays open to keep them alive.
-echo   Close this window or press Ctrl+C to stop all services.
+echo   Services are running in background.
+echo   Press any key or Ctrl+C to stop all services...
 echo ====================================================================
+pause >nul
+
+echo Stopping services...
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8000,9001,9003,9004,9005,9006,3000 -ErrorAction SilentlyContinue | ForEach-Object { if ($_.OwningProcess -gt 0) { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }; exit 0" >nul 2>&1
+taskkill /F /IM engine.exe >nul 2>&1
+echo All services stopped.
 goto end
 
 REM ---------------------- dashboard only ------------------------------

@@ -28,6 +28,12 @@ if here not in sys.path:
 
 from validate import _root, _load_od_matrix
 
+# GPU/CUDA wrapper for OpenCV image processing (falls back to CPU if no
+# CUDA-capable OpenCV device is present).
+sys.path.insert(0, os.path.join(here, "..", "..", "ml"))
+from cv.cuda_wrapper import CvCuda
+cv = CvCuda()  # probed once; GPU used when available
+
 
 def _fetch_traffic_tile(city_bbox, hour):
     """Fetch a real traffic tile from a ToS-compliant provider.
@@ -112,16 +118,16 @@ def classify_tile_classical(img_hsv):
     lower_green = np.array([36, 70, 50])
     upper_green = np.array([85, 255, 255])
 
-    mask_red1 = cv2.inRange(img_hsv, lower_red1, upper_red1)
-    mask_red2 = cv2.inRange(img_hsv, lower_red2, upper_red2)
-    mask_red = mask_red1 | mask_red2
+    mask_red1 = cv.inRange(img_hsv, lower_red1, upper_red1)
+    mask_red2 = cv.inRange(img_hsv, lower_red2, upper_red2)
+    mask_red = cv.bitwise_or(mask_red1, mask_red2)
 
-    mask_yellow = cv2.inRange(img_hsv, lower_yellow, upper_yellow)
-    mask_green = cv2.inRange(img_hsv, lower_green, upper_green)
+    mask_yellow = cv.inRange(img_hsv, lower_yellow, upper_yellow)
+    mask_green = cv.inRange(img_hsv, lower_green, upper_green)
 
-    red_count = np.count_nonzero(mask_red)
-    yellow_count = np.count_nonzero(mask_yellow)
-    green_count = np.count_nonzero(mask_green)
+    red_count = cv.countNonZero(mask_red)
+    yellow_count = cv.countNonZero(mask_yellow)
+    green_count = cv.countNonZero(mask_green)
 
     total_traffic_px = red_count + yellow_count + green_count
     if total_traffic_px == 0:
@@ -149,7 +155,7 @@ def classify_tile_ml(img):
     if not HAS_OPENCV or img is None:
         return random.choice([0, 1, 2, 3]), 0.88
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray = cv.cvtColor(img, cv2.COLOR_BGR2GRAY)
     variance = np.var(gray)
 
     if variance > 3000:
@@ -214,7 +220,7 @@ def extract_city_cv_congestion(city="chicago"):
                     sample_tile[28:36, :] = [0, 255, 0]
                 img = sample_tile
 
-            img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            img_hsv = cv.cvtColor(img, cv2.COLOR_BGR2HSV)
             c_level, c_conf = classify_tile_classical(img_hsv)
             ml_level, ml_conf = classify_tile_ml(img)
             hourly_data[str(hour)] = {

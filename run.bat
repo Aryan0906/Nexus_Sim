@@ -125,6 +125,33 @@ exit /b 0
 
 
 :build
+REM ---- CUDA preflight: detect GPU and configure dynamically -------------
+set "CUDA_AVAILABLE=0"
+set "ONNX_CUDA_AVAILABLE=0"
+set "PY_CMD=python"
+if exist ".venv\Scripts\python.exe" set "PY_CMD=.venv\Scripts\python.exe"
+if exist ".venv\Scripts\python.exe" (
+    "%PY_CMD%" ml/cuda_detect.py > "%TEMP%\\nexussim_cuda_env.txt" 2>nul
+    if not errorlevel 1 (
+        for /f "tokens=* delims=" %%a in ('findstr /R "PyTorch.*CUDA" "%TEMP%\\nexussim_cuda_env.txt"') do set "CUDA_AVAILABLE=1"
+        for /f "tokens=* delims=" %%a in ('findstr /R "ONNX Runtime.*CUDA EP" "%TEMP%\\nexussim_cuda_env.txt"') do set "ONNX_CUDA_AVAILABLE=1"
+    )
+)
+if "%CUDA_AVAILABLE%"=="1" (
+    echo [GPU] CUDA detected — training will use GPU
+    set "TRAIN_DEVICE_DEFAULT=cuda"
+) else (
+    echo [GPU] No CUDA — training will use CPU
+    set "TRAIN_DEVICE_DEFAULT=cpu"
+)
+if "%ONNX_CUDA_AVAILABLE%"=="1" (
+    echo [GPU] ONNX Runtime CUDA EP detected — engine inference will use GPU
+    set "ORT_CUDA_FLAG=-DENABLE_ONNX_CUDA=ON"
+) else (
+    echo [GPU] ONNX Runtime CUDA EP not available — engine inference will use CPU
+    set "ORT_CUDA_FLAG=-DENABLE_ONNX_CUDA=OFF"
+)
+
 if "%REBUILD%"=="0" if exist "engine\build\engine.exe" (
     echo [build] engine.exe found - skipping configure/build
     echo         ^(pass --rebuild to force a clean rebuild^)
@@ -134,7 +161,7 @@ if "%REBUILD%"=="0" if exist "engine\build\engine.exe" (
 echo [1/3] Configuring CMake...
 if not exist "engine\build" mkdir "engine\build"
 cd engine\build
-cmake .. -G Ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DENABLE_TESTING=OFF -DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe
+cmake .. -G Ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DENABLE_TESTING=OFF %ORT_CUDA_FLAG% -DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe
 if errorlevel 1 (
     echo ERROR: CMake configuration failed!
     cd ..\..
@@ -154,6 +181,8 @@ cd ..\..
 
 :train
 if "%TRAIN%"=="0" goto run_engine
+REM Use auto-detected device when --train-device not explicitly set
+if "%TRAIN_DEVICE%"=="auto" set "TRAIN_DEVICE=%TRAIN_DEVICE_DEFAULT%"
 echo.
 echo ============================================
 echo   Training MARL policy

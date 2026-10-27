@@ -18,6 +18,16 @@ try:
 except ImportError:
     HAS_CV_DEPS = False
 
+# GPU/CUDA wrapper for OpenCV image processing (falls back to CPU if no
+# CUDA-capable OpenCV device is present).
+if HAS_CV_DEPS:
+    import sys, os
+    _cv_cuda_path = os.path.join(os.path.dirname(os.path.abspath(__file__)))
+    if _cv_cuda_path not in sys.path:
+        sys.path.insert(0, _cv_cuda_path)
+    from cuda_wrapper import CvCuda
+    cv = CvCuda()  # probed once; GPU used when available
+
 
 class VirtualCamera:
     def __init__(self, width=640, height=480):
@@ -73,12 +83,12 @@ class VirtualCamera:
             cv2.circle(canvas, (px, py), radius, color, -1)
 
         # OpenCV Contour/Blob Detection on Agent-colored mask
-        hsv = cv2.cvtColor(canvas, cv2.COLOR_BGR2HSV)
+        hsv = cv.cvtColor(canvas, cv2.COLOR_BGR2HSV)
         
         # Segment agent colors (non-road pixels)
         lower_bound = np.array([0, 50, 50])
         upper_bound = np.array([180, 255, 255])
-        mask = cv2.inRange(hsv, lower_bound, upper_bound)
+        mask = cv.inRange(hsv, lower_bound, upper_bound)
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 

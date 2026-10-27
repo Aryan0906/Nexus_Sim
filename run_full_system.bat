@@ -23,11 +23,13 @@ echo [0/7] Probing CUDA / GPU...
 set "PY_CMD=.venv\Scripts\python.exe"
 if not exist "!PY_CMD!" set "PY_CMD=python"
 
-echo   --- PyTorch (training device) ---
-!PY_CMD! -c "import torch; has=torch.cuda.is_available(); gpu=torch.cuda.get_device_name(0) if has else 'CPU'; print('  CUDA available: '+('YES' if has else 'NO')); print('  GPU: '+gpu)" 2>nul || echo "  [WARN] torch not importable in !PY_CMD!"
+REM Unified probe via cuda_detect.py (checks PyTorch, ONNX Runtime, OpenCV)
+!PY_CMD! ml/cuda_detect.py 2>nul || echo "  [WARN] cuda_detect.py not available"
 
-echo   --- ONNX Runtime (engine inference provider) ---
-!PY_CMD! -c "import onnxruntime as ort; p=ort.get_available_providers(); print('  Providers: '+', '.join(p)); print('  CUDA EP: '+('YES' if 'CUDAExecutionProvider' in p else 'NO  -> inference runs on CPU'))" 2>nul || echo "  [WARN] onnxruntime not importable in !PY_CMD!"
+REM Determine engine ONNX provider from probe
+set "ORT_PROVIDER=cpu"
+for /f "tokens=* delims=" %%a in ('!PY_CMD! -c "from ml.cuda_detect import CudaEnv; e=CudaEnv.probe(); print(e.recommended_onnx_provider)" 2>nul') do set "ORT_PROVIDER=%%a"
+echo   Engine ONNX provider: !ORT_PROVIDER!
 echo.
 
 REM ---- prepare logs dir ----------------------------------------------
@@ -40,7 +42,7 @@ set LAUNCH_OK=1
 REM ---- 1. C++ Simulation Engine (WS :9001) ---------------------------
 echo [1/7] Starting C++ Simulation Engine (WS :9001)...
 if exist engine\build\engine.exe (
-    set "ENGINE_ARGS=--city %CITY% --port 9001"
+    set "ENGINE_ARGS=--city %CITY% --port 9001 --onnx-provider !ORT_PROVIDER!"
     if exist certs\server.crt if exist certs\server.key set "ENGINE_ARGS=!ENGINE_ARGS! --ssl-cert certs\server.crt --ssl-key certs\server.key"
     start /b "" cmd /c "engine\build\engine.exe !ENGINE_ARGS! > logs\engine.log 2>&1"
     echo   engine backgrounded -> logs\engine.log

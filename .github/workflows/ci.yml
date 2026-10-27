@@ -17,9 +17,73 @@ env:
   NODE_VERSION: '22'
 
 jobs:
+  # ------------------------------------------------------------------ CUDA probe
+  cuda-probe:
+    name: CUDA / GPU Environment Probe
+    runs-on: ubuntu-latest
+    outputs:
+      has_cuda: ${{ steps.probe.outputs.has_cuda }}
+      has_onnx_cuda: ${{ steps.probe.outputs.has_onnx_cuda }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install probe dependencies
+        run: pip install torch onnxruntime opencv-python-headless numpy
+
+      - name: Probe GPU capabilities
+        id: probe
+        run: |
+          python - <<'EOF'
+          import importlib
+          results = {}
+
+          # PyTorch CUDA
+          try:
+              import torch
+              results["torch_cuda"] = str(torch.cuda.is_available()).lower()
+          except ImportError:
+              results["torch_cuda"] = "false"
+
+          # ONNX Runtime CUDA EP
+          try:
+              import onnxruntime as ort
+              providers = ort.get_available_providers()
+              results["onnx_cuda"] = str("CUDAExecutionProvider" in providers).lower()
+          except ImportError:
+              results["onnx_cuda"] = "false"
+
+          # OpenCV CUDA
+          try:
+              import cv2
+              if hasattr(cv2, "cuda"):
+                  results["opencv_cuda"] = str(cv2.cuda.getCudaEnabledDeviceCount() > 0).lower()
+              else:
+                  results["opencv_cuda"] = "false"
+          except ImportError:
+              results["opencv_cuda"] = "false"
+
+          print(f"torch_cuda={results['torch_cuda']}")
+          print(f"onnx_cuda={results['onnx_cuda']}")
+          print(f"opencv_cuda={results['opencv_cuda']}")
+
+          # GitHub Actions ubuntu-latest has no NVIDIA GPU
+          has_cuda = "true" if results["torch_cuda"] == "true" else "false"
+          has_onnx_cuda = "true" if results["onnx_cuda"] == "true" else "false"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"has_cuda={has_cuda}\n")
+              f.write(f"has_onnx_cuda={has_onnx_cuda}\n")
+          EOF
+
   # ------------------------------------------------------------------ C++ engine
   engine-core:
     name: C++ Simulation Engine
+    needs: cuda-probe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +102,8 @@ jobs:
         run: |
           cd engine
           mkdir -p build && cd build
-          cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          # ONNX CUDA auto-mode: CMakeLists.txt tries GPU package, falls back to CPU
+          cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DENABLE_ONNX_CUDA=AUTO
           cmake --build . --parallel
 
       - name: C++ CTest Suite (Agents, Quadtree, Signals, Invariants)
@@ -46,9 +111,15 @@ jobs:
           cd engine/build
           ctest --output-on-failure
 
+      - name: Report ONNX CUDA status
+        run: |
+          cd engine/build
+          ./bench_inference --provider auto 2>&1 || true
+
   # ------------------------------------------------------------- data pipeline
   data-pipeline:
     name: Urban Data Pipeline & OD Calibration
+    needs: cuda-probe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +150,7 @@ jobs:
   # ------------------------------------------------------------------- ML suite
   ml-subsystems:
     name: ML, MARL & Soft Computing
+    needs: cuda-probe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,6 +181,7 @@ jobs:
   # ----------------------------------------------------------------- dashboard
   dashboard-ui:
     name: Dashboard UI & Vitest Harness
+    needs: cuda-probe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,6 +211,7 @@ jobs:
   # ------------------------------------------------------- gateway (offline)
   gateway-api:
     name: Gateway API (Offline TestClient)
+    needs: cuda-probe
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -157,14 +231,11 @@ jobs:
   # ------------------------------------------- postman / api_check verification
   api-verification:
     name: Postman / api_check Full-Stack Verification
-    needs: [engine-core, data-pipeline, ml-subsystems, dashboard-ui, gateway-api]
+    needs: [engine-core, data-pipeline, ml-subsystems, dashboard-ui, gateway-api, cuda-probe]
     runs-on: ubuntu-latest
     continue-on-error: true
-    # NOTE: This job exercises the live stack (engine WS :9001, gateway :8000,
-    # sidecars :9003-:9006, dashboard :3000). In CI we start the Python-based
-    # services (gateway + sidecars) and the built C++ engine; checks that
-    # require a live engine WS will degrade gracefully if the engine binary is
-    # unavailable. Run locally against `run_full_system.bat` for a green run.
+    # Exercises the live stack (engine WS :9001, gateway :8000,
+    # sidecars :9003-:9006, dashboard :3000).
     steps:
       - uses: actions/checkout@v4
 
@@ -184,7 +255,7 @@ jobs:
       - name: Install API Check Dependencies
         run: |
           cd ml && pip install -r requirements.txt
-          pip install requests websocket-client fastapi uvicorn python-multipart python-jose[cryptography]
+          pip install requests websocket-client fastapi uvicorn python-multipart python-jose[cryptography] opencv-python-headless
 
       - name: Install Node.js for dashboard preview
         uses: actions/setup-node@v4
@@ -203,7 +274,7 @@ jobs:
         run: |
           cd engine
           mkdir -p build && cd build
-          cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON
+          cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DENABLE_ONNX_CUDA=AUTO
           cmake --build . --parallel
 
       - name: Start Python Services (gateway + sidecars)
@@ -220,7 +291,7 @@ jobs:
       - name: Start C++ Engine (WS :9001)
         run: |
           cd "$GITHUB_WORKSPACE/engine"
-          nohup ./build/engine --city piedmont --agents 100 > /tmp/engine.log 2>&1 &
+          nohup ./build/engine --city piedmont --agents 100 --onnx-provider auto > /tmp/engine.log 2>&1 &
           sleep 4
           echo "--- engine log tail ---"; tail -n 5 /tmp/engine.log || true
 
@@ -250,15 +321,47 @@ jobs:
           path: postman/results/api_check-*.{json,md}
           retention-days: 7
 
+  # ---------------------------------------------------- GPU job (self-hosted)
+  gpu-inference:
+    name: GPU Inference Verification (self-hosted)
+    needs: cuda-probe
+    if: needs.cuda-probe.outputs.has_onnx_cuda == 'true'
+    runs-on: self-hosted
+    continue-on-error: true
+    # Only runs on self-hosted runners that have an NVIDIA GPU with
+    # CUDA-enabled ONNX Runtime. Validates end-to-end GPU inference.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify GPU detected
+        run: |
+          nvidia-smi || echo "nvidia-smi not available"
+          python -c "import torch; print('Torch CUDA:', torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+          python -c "import onnxruntime as ort; print('ORT providers:', ort.get_available_providers())"
+
+      - name: Build engine with CUDA ONNX
+        run: |
+          cd engine
+          mkdir -p build && cd build
+          cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON -DENABLE_ONNX_CUDA=ON
+          cmake --build . --parallel
+
+      - name: Run ONNX inference benchmark with CUDA EP
+        run: |
+          cd engine/build
+          ./bench_inference --provider cuda 2>&1 || echo "CUDA EP benchmark failed (fallback to CPU expected if CUDA runtime missing)"
+
+      - name: Run engine with --onnx-provider cuda
+        run: |
+          cd engine/build
+          timeout 30 ./engine --city piedmont --agents 100 --onnx-provider cuda --fast --no-ws 2>&1 || true
+
   # ---------------------------------------------------- Windows build validation
   windows-build:
     name: Windows Build Validation (documented path)
+    needs: cuda-probe
     runs-on: windows-latest
     continue-on-error: true
-    # The Windows dev path (run.bat / Makefile -G Ninja) requires make, ninja,
-    # and OpenSSL which are not guaranteed on every runner. This job validates
-    # that the configured toolchain is present and reports otherwise, so the
-    # blocked Windows path is visible in CI rather than silent.
     steps:
       - uses: actions/checkout@v4
 

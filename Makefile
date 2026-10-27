@@ -36,6 +36,7 @@ test:
 	cd engine && mkdir -p build && cd build && cmake .. -G Ninja -DENABLE_TESTING=ON && cmake --build . && ctest --output-on-failure
 	cd pipeline && pip install -q -r requirements.txt && python -m pytest tests/ -v
 	cd ml && pip install -q -r requirements.txt && python -m pytest tests/ -v
+	python -m pytest gateway/test_gateway.py -v
 	cd dashboard && npm install --silent && npm run test
 
 bench:

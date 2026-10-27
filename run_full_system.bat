@@ -1,64 +1,98 @@
 @echo off
 setlocal enabledelayedexpansion
 REM ====================================================================
-REM  NexusSim — Full 48-Algorithm Multi-Subject System Launcher
-REM  With Dynamic City Onboarding Support
+REM  NexusSim — Full System Launcher
+REM  Single console window: every service is backgrounded (start /b) and
+REM  logs to logs\ so no extra PowerShell/cmd windows pop up.
 REM ====================================================================
 
 if "%~1"=="--help" goto show_help
 if "%~1"=="-h" goto show_help
 
 set CITY=%~1
-if "%CITY%"=="" set CITY=chicago
+if "%CITY%"=="" set CITY=piedmont
 
 echo ====================================================================
 echo   NexusSim Full System Launcher
-echo   City: %CITY%
+echo   Default city: %CITY%
 echo ====================================================================
 echo.
 
-echo [1/6] Launching C++ Simulation Engine on port 9001...
-start "NexusSim C++ Engine" cmd /k "run.bat --city %CITY% --duration 60"
+REM ---- 0. CUDA / GPU probe -------------------------------------------
+echo [0/7] Probing CUDA / GPU...
+set "PY_CMD=.venv\Scripts\python.exe"
+if not exist "!PY_CMD!" set "PY_CMD=python"
 
-echo [2/6] Launching CV Virtual Camera Service on port 9003...
-start "NexusSim Virtual Camera" cmd /k ".venv\Scripts\python.exe ml\cv\virtual_camera_service.py"
+echo   --- PyTorch (training device) ---
+!PY_CMD! -c "import torch; has=torch.cuda.is_available(); gpu=torch.cuda.get_device_name(0) if has else 'CPU'; print('  CUDA available: '+('YES' if has else 'NO')); print('  GPU: '+gpu)" 2>nul || echo "  [WARN] torch not importable in !PY_CMD!"
 
-echo [3/6] Launching NLP Chat & Incident Sidecar on port 9004...
-start "NexusSim NLP Chat" cmd /k ".venv\Scripts\python.exe ml\nlp\chat_service.py"
+echo   --- ONNX Runtime (engine inference provider) ---
+!PY_CMD! -c "import onnxruntime as ort; p=ort.get_available_providers(); print('  Providers: '+', '.join(p)); print('  CUDA EP: '+('YES' if 'CUDAExecutionProvider' in p else 'NO  -> inference runs on CPU'))" 2>nul || echo "  [WARN] onnxruntime not importable in !PY_CMD!"
+echo.
 
-echo [4/6] Launching Cross-Subject Event Bus on port 9005...
-start "NexusSim Event Bus" cmd /k ".venv\Scripts\python.exe pipeline\src\event_bus.py"
+REM ---- prepare logs dir ----------------------------------------------
+if not exist logs mkdir logs
 
-echo [5/6] Launching Algorithm Explorer API Sidecar on port 9006...
-start "NexusSim Algo Explorer API" cmd /k ".venv\Scripts\python.exe ml\sidecars\algo_explorer_service.py"
+REM Helper: launch a service backgrounded in THIS window (no new window)
+REM usage: call :launch "Log tag" "command > logfile 2>&1"
+set LAUNCH_OK=1
 
-echo [6/6] Launching Unified API Gateway on port 8000...
-start "NexusSim API Gateway" cmd /k "python -m gateway.server"
+REM ---- 1. C++ Simulation Engine (WS :9001) ---------------------------
+echo [1/7] Starting C++ Simulation Engine (WS :9001)...
+if exist engine\build\engine.exe (
+    set "ENGINE_ARGS=--city %CITY% --port 9001"
+    if exist certs\server.crt if exist certs\server.key set "ENGINE_ARGS=!ENGINE_ARGS! --ssl-cert certs\server.crt --ssl-key certs\server.key"
+    start /b "" cmd /c "engine\build\engine.exe !ENGINE_ARGS! > logs\engine.log 2>&1"
+    echo   engine backgrounded -> logs\engine.log
+) else (
+    echo   [WARN] engine\build\engine.exe not found; build it first (run.bat or cmake)
+)
+
+REM ---- 2. Unified API Gateway (:8000) --------------------------------
+echo [2/7] Starting Unified API Gateway (:8000)...
+start /b "" cmd /c "!PY_CMD! -m gateway.server > logs\gateway.log 2>&1"
+echo   gateway backgrounded -> logs\gateway.log
+
+REM ---- 3. CV Virtual Camera (:9003) ----------------------------------
+echo [3/7] Starting CV Virtual Camera (:9003)...
+start /b "" cmd /c "!PY_CMD! ml\cv\virtual_camera_service.py > logs\camera.log 2>&1"
+echo   camera backgrounded -> logs\camera.log
+
+REM ---- 4. NLP Chat & Incident Sidecar (:9004) ------------------------
+echo [4/7] Starting NLP Chat & Incident Sidecar (:9004)...
+start /b "" cmd /c "!PY_CMD! ml\nlp\chat_service.py > logs\nlp.log 2>&1"
+echo   nlp backgrounded -> logs\nlp.log
+
+REM ---- 5. Cross-Subject Event Bus (:9005) ----------------------------
+echo [5/7] Starting Cross-Subject Event Bus (:9005)...
+start /b "" cmd /c "!PY_CMD! pipeline\src\event_bus.py > logs\eventbus.log 2>&1"
+echo   event bus backgrounded -> logs\eventbus.log
+
+REM ---- 6. Algorithm Explorer API Sidecar (:9006) ---------------------
+echo [6/7] Starting Algorithm Explorer API (:9006)...
+start /b "" cmd /c "!PY_CMD! ml\sidecars\algo_explorer_service.py > logs\algo.log 2>&1"
+echo   algo explorer backgrounded -> logs\algo.log
 
 echo.
 echo ====================================================================
-echo   All NexusSim services started.
+echo   All NexusSim services started (single window; logs in logs\).
 echo ====================================================================
-echo   City:           %CITY%
-echo   Engine WS:      ws://localhost:9001
-echo   Gateway:        https://localhost:8000
-echo   Gateway WS:     wss://localhost:8000/ws
-echo   Dashboard:      http://localhost:3000  (run: cd dashboard ^&^& npm run dev)
-echo   API Docs:       https://localhost:8000/docs
-echo   Auth Login:     POST https://localhost:8000/api/auth/login
-echo   City Upload:    POST https://localhost:8000/api/cities/upload
-echo   Simulations:    POST https://localhost:8000/api/simulations
-echo   Scenarios:      POST https://localhost:8000/api/scenarios
+echo   Default city:      %CITY%
+echo   Engine WS:         ws://localhost:9001
+echo   Gateway:           https://localhost:8000
+echo   Dashboard:         http://localhost:3000  (run: cd dashboard && npm run dev)
+echo   API docs:          https://localhost:8000/docs
+echo   Logs:              logs\
 echo ====================================================================
-echo   To run a different city:  run_full_system.bat <city_id>
-echo   To upload a new city OSM: POST /api/cities/upload with .osm/.pbf/.graphml
+echo   Services run backgrounded; this window stays open to keep them alive.
+echo   Close this window or press Ctrl+C to stop all services.
 echo ====================================================================
 goto end
 
 :show_help
 echo Usage: run_full_system.bat [CITY_ID]
 echo.
-echo   CITY_ID   City to simulate (default: chicago)
+echo   CITY_ID   City to simulate (default: piedmont)
 echo             Use a city registered via /api/cities/upload or in cities.yaml
 echo.
 echo Examples:

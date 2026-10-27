@@ -33,7 +33,7 @@
 
 ## Slide 5: Build & Setup
 - Prerequisites: GCC 11+/MinGW-w64 (C++17), CMake ≥ 3.25, Python 3.11+, Node.js 20+
-- Windows: run.bat builds engine, starts engine + dashboard; run_full_system.bat launches gateway :8000 + sidecars
+- Windows: run_full_system.bat builds engine, trains (optional), starts engine + all sidecars
 - Unix: make build / run / demo / test / bench / dashboard (Makefile hardcodes -G Ninja)
 - Docker: docker-compose.yml + Dockerfile.{engine,sidecars,dashboard} present but unbuilt in this environment
 - This environment: cmake 4.4.0 ✓, python 3.11.9 ✓, node 22.17.1 ✓; make ✗, ninja ✗, openssl ✗ → cmake -G Ninja blocked; prebuilt build/engine.exe exists from a prior build

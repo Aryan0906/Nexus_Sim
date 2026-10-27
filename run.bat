@@ -177,6 +177,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM ---- copy runtime DLLs next to engine.exe --------------------------
+if exist engine\build\engine.exe (
+    if exist "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" engine\build\ >nul
+    if exist "C:\msys64\mingw64\bin\libssl-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libssl-3-x64.dll" engine\build\ >nul
+    if exist "C:\msys64\mingw64\bin\zlib1.dll" copy /Y "C:\msys64\mingw64\bin\zlib1.dll" engine\build\ >nul
+    for %%d in ("engine\build\onnxruntime.dll") do if exist "%%d" copy /Y "%%d" engine\build\ >nul
+)
+
 cd ..\..
 
 :train

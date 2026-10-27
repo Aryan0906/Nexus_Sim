@@ -12,6 +12,18 @@ if "%~1"=="-h" goto show_help
 set CITY=%~1
 if "%CITY%"=="" set CITY=piedmont
 
+REM ---- ensure OpenSSL/zlib DLLs are on PATH (needed by engine.exe) ----
+set PATH=C:\msys64\mingw64\bin;%PATH%
+
+REM ---- copy required runtime DLLs next to engine.exe ------------------
+if exist engine\build\engine.exe (
+    if exist "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" engine\build\ >nul
+    if exist "C:\msys64\mingw64\bin\libssl-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libssl-3-x64.dll" engine\build\ >nul
+    if exist "C:\msys64\mingw64\bin\zlib1.dll" copy /Y "C:\msys64\mingw64\bin\zlib1.dll" engine\build\ >nul
+    REM ONNX Runtime DLL (from build tree if present)
+    for %%d in ("engine\build\onnxruntime.dll") do if exist "%%d" copy /Y "%%d" engine\build\ >nul
+)
+
 echo ====================================================================
 echo   NexusSim Full System Launcher
 echo   Default city: %CITY%

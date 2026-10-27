@@ -257,7 +257,7 @@ PHASE 10 - Policy Toggles & Dashboard Polish .................. DONE
 ====================================================================
 9. HOW TO RUN THE PROJECT
 ====================================================================
-Windows: Just run "run_full_system.bat"
+Windows: Just run "run.bat"
   -> Builds everything, starts dashboard at localhost:5173,
      runs a 5-minute demo with 500 vehicles in Piedmont.
 

@@ -40,7 +40,7 @@ No metrics were fabricated; unknown values are marked TBD.
 Prerequisites: GCC 11+/MinGW-w64 (C++17), CMake ≥ 3.25, Ninja, Python 3.11+, Node.js 20+.
 
 ```bash
-# C++ engine (Unix example; Windows uses run_full_system.bat)
+# C++ engine (Unix example; Windows uses run.bat)
 cd engine && mkdir -p build && cd build
 cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTING=ON
 cmake --build .
@@ -57,7 +57,7 @@ python -m train.train --city toy --episodes 500
 cd dashboard && npm install && npm run dev
 ```
 
-Windows one-click: `run_full_system.bat` (builds engine, trains optional MARL policy, starts engine + all sidecars).
+Windows one-click: `run.bat` (builds engine, trains optional MARL policy, starts engine + all sidecars).
 
 > Build notes for this environment: `make` and `ninja` are not installed, and OpenSSL is not present, so `make build` (which hardcodes `-G Ninja` and requires OpenSSL) cannot run as documented. Use `cmake -G "MinGW Makefiles"` instead; a full `FetchContent` configure may take several minutes on the first run. Prebuilt `build/engine.exe` exists from a prior build.
 

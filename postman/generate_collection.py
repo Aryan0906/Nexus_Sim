@@ -12,7 +12,7 @@ Run with Newman:
         -e postman/NexusSim_Environment.json \
         --insecure --reporters cli,htmlextra
 
-Requires all services running (run_full_system.bat) and the gateway serving
+Requires all services running (run.bat) and the gateway serving
 HTTPS with the local self-signed cert.
 """
 
@@ -373,7 +373,7 @@ def build_collection() -> dict:
                 "Full-stack API collection for NexusSim. Import into Postman (File > Import) "
                 "and run top to bottom. Covers A-H (original), I (city management), "
                 "J (auth & simulation), K (platform services). All services must be running "
-                "(run_full_system.bat). Gateway serves HTTPS with a local self-signed cert."
+                "(run.bat). Gateway serves HTTPS with a local self-signed cert."
             ),
             "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         },

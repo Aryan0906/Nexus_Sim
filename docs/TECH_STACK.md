@@ -135,7 +135,7 @@ fields grow by addition only (NFR-5).
 
 | Env | Stack | Notes |
 |-----|-------|-------|
-| Windows dev | MSYS2 MinGW-w64, CMake ≥ 3.25, Ninja, Python 3.11+, Node 20+ | `run_full_system.bat` |
+| Windows dev | MSYS2 MinGW-w64, CMake ≥ 3.25, Ninja, Python 3.11+, Node 20+ | `run.bat` |
 | Linux/macOS dev | GCC 11+/Clang 14+, CMake, Ninja, Python 3.11+, Node 20+ | `make` targets |
 | CI | GitHub Actions `ubuntu-latest` | Build + lint + test all subsystems |
 | Sidecars | Python 3.11 + FastAPI/OpenCV | Ports 9003–9006; separate venv deps |

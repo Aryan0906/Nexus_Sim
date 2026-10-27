@@ -66,7 +66,7 @@ goto parse_args
 
 REM ---------------------- show help -----------------------------------
 :show_help
-echo Usage: run_full_system.bat [OPTIONS]
+echo Usage: run.bat [OPTIONS]
 echo.
 echo Core options:
 echo   --city NAME        City to simulate (default: piedmont)
@@ -95,12 +95,12 @@ echo   --policy PATH      ONNX policy file for the engine (e.g. ml\policy.onnx)
 echo   --python PATH      Python interpreter (default: python)
 echo.
 echo Examples:
-echo   run_full_system.bat
-echo   run_full_system.bat --train --train-city piedmont --train-device cuda
-echo   run_full_system.bat --city chicago --agents 2000 --duration 10
-echo   run_full_system.bat --city chicago --od data\chicago\od_matrix.json --duration 60
-echo   run_full_system.bat --fast --no-ws --od data\chicago\od_matrix.json --duration 60
-echo   run_full_system.bat --dashboard-only
+echo   run.bat
+echo   run.bat --train --train-city piedmont --train-device cuda
+echo   run.bat --city chicago --agents 2000 --duration 10
+echo   run.bat --city chicago --od data\chicago\od_matrix.json --duration 60
+echo   run.bat --fast --no-ws --od data\chicago\od_matrix.json --duration 60
+echo   run.bat --dashboard-only
 exit /b 0
 
 REM ---------------------- CUDA preflight ------------------------------

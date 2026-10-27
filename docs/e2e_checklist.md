@@ -71,7 +71,7 @@ agents randomly.
 ## 2. Engine — headless run
 
 - [ ] Runs to completion without crashing:
-      `run_full_system.bat --fast --no-ws --city <city> --od data\<city>\od_matrix.json --duration 10 --journey data\<city>\journey_times.csv`
+      `run.bat --fast --no-ws --city <city> --od data\<city>\od_matrix.json --duration 10 --journey data\<city>\journey_times.csv`
 - [ ] Startup log prints a plausible node / edge / lane / zone count
 - [ ] `Initialized N signal controllers` appears with `N > 0`
 - [ ] `Loaded N OD pairs` appears (OD mode) with `N > 0`
@@ -108,7 +108,7 @@ confirming that refusal is itself a check.
 
 ## 4. Engine + dashboard — live run
 
-- [ ] Start the engine with WebSocket enabled: `run_full_system.bat --city <city> --od data\<city>\od_matrix.json --duration 30`
+- [ ] Start the engine with WebSocket enabled: `run.bat --city <city> --od data\<city>\od_matrix.json --duration 30`
 - [ ] Engine logs `WebSocket server listening on port 9001`
 - [ ] `cd dashboard && npm run dev`, open <http://localhost:5173>
 - [ ] Engine logs `Client connected`

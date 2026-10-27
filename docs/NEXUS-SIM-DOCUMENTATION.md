@@ -3,7 +3,7 @@
 **Status:** Active
 **Owner:** Vyom & Vatsal
 **Replaces:** the earlier documents in `docs/` (see `docs/README.md` for the inventory)
-**Verified against:** the working tree on 2026-10-24 (commit `446d9a8`, plus the uncommitted ML, `run_full_system.bat`, and README changes)
+**Verified against:** the working tree on 2026-10-24 (commit `446d9a8`, plus the uncommitted ML, `run.bat`, and README changes)
 
 > **Reading convention.** Each factual claim is either verified against a file in
 > this repository, or marked `[NEEDS CONFIRMATION]`. `[UNVERIFIED]` marks a
@@ -214,7 +214,7 @@ NexusSim/
 ├── docs/                       # This document and its references
 ├── .github/workflows/ci.yml    # CI: build and test all subsystems
 ├── Makefile                    # Unix build/run/test helpers
-├── run_full_system.bat              # Windows one-click build, train, and run
+├── run.bat                     # Windows one-click build and run
 └── stress_test.sh              # Unix large-scale plus valgrind run
 ```
 
@@ -357,10 +357,10 @@ over WebSocket, so `make demo` alone shows no simulation. To see the UI, run
 **Windows**
 
 ```bat
-run_full_system.bat
+run.bat
 ```
 
-`run_full_system.bat` adds `C:\msys64\mingw64\bin` to `PATH`, builds the engine, optionally trains the MARL policy, exports it to ONNX, and starts the engine plus all sidecars.
+`run.bat` adds `C:\msys64\mingw64\bin` to `PATH`, builds the engine, optionally trains the MARL policy, exports it to ONNX, and starts the engine plus all sidecars.
 the engine plus the dashboard dev server.
 
 > Contradiction to resolve: the root `README.md` states that `make demo`
@@ -524,9 +524,9 @@ Windows. The banner reads `NexusSim Engine v3.1`.
 The engine prints `Signal mode: rl` or `Signal mode: webster` at startup. At
 the end of a run it reports CO₂ (kg), NOₓ (g), and a Transit Equity Index.
 
-### 4.2 `run_full_system.bat` (Windows)
+### 4.2 `run.bat` (Windows)
 
-`run_full_system.bat` wraps the build, the engine, and the dashboard. It accepts the engine
+`run.bat` wraps the build, the engine, and the dashboard. It accepts the engine
 options above and these extras:
 
 | Option | Description |
@@ -543,13 +543,13 @@ options above and these extras:
 | `--python PATH` | Python interpreter. Default `python`. |
 | `--help`, `-h` | Show usage. |
 
-`run_full_system.bat` defaults differ from the engine defaults: `--speed-factor 0.55`,
+`run.bat` defaults differ from the engine defaults: `--speed-factor 0.55`,
 `--route-spread 0.2`, and auto demand scaling.
 
-`run_full_system.bat` never trains unless `--train` is given. The C++ engine is CPU-only.
+`run.bat` never trains unless `--train` is given. The C++ engine is CPU-only.
 
 ```bat
-run_full_system.bat --train --train-device cuda --city piedmont
+run.bat --train --train-device cuda --city piedmont
 ```
 
 ### 4.3 `Makefile` Targets (Unix)
@@ -1001,7 +1001,7 @@ The file has no Chicago row.
 | Endpoint, spawning, and map-control fixes | `446d9a8` (HEAD) |
 
 Uncommitted: `ml/train/device.py`, `ml/requirements-cuda.txt`, changes across
-`ml/`, `run_full_system.bat`, `README.md`, and `docs/`.
+`ml/`, `run.bat`, `README.md`, and `docs/`.
 
 ---
 

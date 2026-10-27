@@ -262,6 +262,21 @@ Saved journey_times.csv
 | `--debug` | Build in Debug mode |
 | `--dashboard-only` | Start the dashboard only (skip build/run) |
 | `--help`, `-h` | Show usage |
+| `--policy PATH` | ONNX policy for the engine (e.g. `ml\policy.onnx`) |
+| `--train` | Train the MAPPO policy, export it to ONNX, then run the engine with it |
+| `--train-city NAME` | City to train on (default: `toy`) |
+| `--train-episodes N` | Training episodes (default: 200; 500 reaches the documented toy convergence) |
+| `--train-device DEV` | `auto` (CUDA when available, else CPU), `cpu`, `cuda`, `cuda:N` (default: `auto`) |
+| `--train-batch-size N` | PPO minibatch size; `0` (default) scales it with the sample count |
+| `--python PATH` | Python interpreter used for training (default: `python`) |
+
+`run.bat` itself never trains by default — it only builds the C++ engine and runs the traffic simulation, which is a pure CPU program. Use `--train` to put the GPU to work:
+
+```bat
+run.bat --train --train-device cuda --city piedmont
+```
+
+This trains on the GPU, writes `ml\policy.onnx`, and starts the engine with `--policy ml\policy.onnx` (the engine then reports `Signal mode: rl` instead of `webster`).
 
 ### `Makefile` targets (Unix)
 
@@ -298,7 +313,7 @@ Phase 7 ships an offline MAPPO trainer that learns to control the intersections 
 
 ```bash
 cd ml
-pip install -r requirements.txt
+pip install -r requirements-cuda.txt   # GPU build of PyTorch (see below)
 python -m train.train --city toy --episodes 500 --baseline-episodes 5
 ```
 
@@ -307,6 +322,53 @@ python -m train.train --city toy --episodes 500 --baseline-episodes 5
 - **Checkpoints**: saved to `ml/checkpoints/<city>/<episode>.pt` every `--checkpoint-interval` episodes; resume with `--resume <path>.pt`.
 - **Validated defaults**: `--lr 5e-4 --gamma 0.95 --entropy-coef 0.003 --episodes-per-update 4`, with rewards auto-scaled from the baseline run.
 - **Result on the toy demand**: the trained policy reaches ≈ −7,300 reward within 500 episodes vs the ≈ −11,270 Webster baseline (≈ 35% better), satisfying the Phase 7.8 convergence checkpoint.
+
+#### GPU (CUDA) execution
+
+The trainer runs on the GPU when a CUDA build of PyTorch is installed.
+
+| Install | Command |
+| --- | --- |
+| GPU (recommended) | `pip install -r requirements-cuda.txt` |
+| CPU only | `pip install -r requirements.txt` |
+
+`--device` selects the compute device for `train.train`, `train.transfer`, `train.evaluate`, and the `algo/` suites:
+
+| Value | Behaviour |
+| --- | --- |
+| `auto` (default) | Use CUDA when available, otherwise the CPU. Also settable with the `NEXUS_DEVICE` environment variable. |
+| `cpu` | Force the CPU. |
+| `cuda` / `cuda:N` | Force CUDA. The run fails with an install hint if CUDA is unavailable, so a silent CPU fallback cannot hide a bad install. |
+
+```bash
+python -m train.train --city toy --episodes 500 --device cuda
+```
+
+Two performance notes for CUDA runs:
+
+- The PPO minibatch scales with the number of samples in the update (`--batch-size 0`, the default). The small graphs keep the recorded 1024 minibatch, so their results are unchanged. On a city graph an update holds hundreds of thousands of samples, and fixed 1024-sample minibatches make the update launch-bound: thousands of tiny kernels with the GPU mostly idle. Pass `--batch-size N` to override.
+- Episode time is dominated by the Python/NumPy traffic simulation in `ml/env/`, not by the network. The GPU therefore pays off on large graphs (thousands of intersections) rather than on the small ones.
+
+#### Large city graphs
+
+The larger city graphs (`chicago`, `ahmedabad`) carry no `is_signal` flags, so the loader derives the signalised intersections from topology: a node with at least three incident road legs. This is what makes them trainable.
+
+| City | Intersections | Notes |
+| --- | --- | --- |
+| `toy` | 4 | Built in Python, no data file needed |
+| `piedmont` | 4 | `data/piedmont/graph.json` |
+| `paris` | 16 | `data/paris/graph.json` |
+| `chicago` | 5,217 | `data/chicago/graph.json`, signals derived from topology |
+| `ahmedabad` | 15,724 | `data/ahmedabad/graph.json`, signals derived from topology |
+
+Measured on an RTX 3050 Laptop GPU with the 5,217-intersection Chicago graph:
+
+| Device | 3 episodes | Peak GPU utilisation | Peak GPU memory |
+| --- | --- | --- | --- |
+| CPU | 92.6 s | 0 % | 0 MiB |
+| CUDA | 31.4 s | 89 % | 573 MiB |
+
+The trainer prints the live GPU utilisation and reserved memory in its progress bar, for example `gpu 89% 573MiB`.
 
 ### ONNX export and engine inference
 
@@ -511,7 +573,7 @@ npm run lint     # oxlint
 npm run test     # NOTE: currently a placeholder ("Dashboard test passed")
 ```
 
-`[TODO: Dashboard has no real test suite yet — npm run test is a stub echo. Vitest + React Testing Library is planned per docs/TECH_STACK.md.]`
+`[TODO: Dashboard has no real test suite yet — npm run test is a stub echo. Vitest + React Testing Library is planned (see docs/NEXUS-SIM-DOCUMENTATION.md §5.3).]`
 
 ### CI
 
@@ -536,7 +598,7 @@ The engine must be reachable at `ws://localhost:9001` for the dashboard to funct
 
 ## Contributing
 
-Contributions are welcome. The repo follows a strict, documented convention (see `docs/TECH_STACK.md` §Developer Tooling & Git Discipline):
+Contributions are welcome. The repo follows a strict, documented convention (see `docs/NEXUS-SIM-DOCUMENTATION.md` §7):
 
 - **Commit format:** `<type>(<scope>): <short summary>` — types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`; scopes: `engine`, `pipeline`, `ml`, `dashboard`, `ci`.
   Example: `feat(engine): add quadtree proximity detection for agent collision`

@@ -22,23 +22,37 @@ set JOURNEY_PATH=
 set FAST=0
 set NO_WS=0
 set REBUILD=0
+set POLICY=
+set TRAIN=0
+set TRAIN_CITY=toy
+set TRAIN_EPISODES=200
+set TRAIN_DEVICE=auto
+set TRAIN_BATCH=0
+set PYTHON=python
 
 :parse_args
 if "%~1"=="" goto build
-if "%~1"=="--city" ( set CITY=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--agents" ( set AGENTS=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--duration" ( set DURATION=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--od" ( set OD_PATH=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--demand-scale" ( set DEMAND_SCALE=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--start-hour" ( set START_HOUR=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--speed-factor" ( set SPEED_FACTOR=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--route-spread" ( set ROUTE_SPREAD=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--chaos" ( set CHAOS=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--journey" ( set JOURNEY_PATH=%~2 & shift & shift & goto parse_args )
-if "%~1"=="--fast" ( set FAST=1 & shift & goto parse_args )
-if "%~1"=="--no-ws" ( set NO_WS=1 & shift & goto parse_args )
-if "%~1"=="--debug" ( set BUILD_TYPE=Debug & shift & goto parse_args )
-if "%~1"=="--rebuild" ( set REBUILD=1 & shift & goto parse_args )
+if "%~1"=="--city" ( set "CITY=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--agents" ( set "AGENTS=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--duration" ( set "DURATION=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--od" ( set "OD_PATH=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--demand-scale" ( set "DEMAND_SCALE=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--start-hour" ( set "START_HOUR=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--speed-factor" ( set "SPEED_FACTOR=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--route-spread" ( set "ROUTE_SPREAD=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--chaos" ( set "CHAOS=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--journey" ( set "JOURNEY_PATH=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--fast" ( set "FAST=1" & shift & goto parse_args )
+if "%~1"=="--no-ws" ( set "NO_WS=1" & shift & goto parse_args )
+if "%~1"=="--debug" ( set "BUILD_TYPE=Debug" & shift & goto parse_args )
+if "%~1"=="--rebuild" ( set "REBUILD=1" & shift & goto parse_args )
+if "%~1"=="--policy" ( set "POLICY=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--train" ( set "TRAIN=1" & shift & goto parse_args )
+if "%~1"=="--train-city" ( set "TRAIN_CITY=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--train-episodes" ( set "TRAIN_EPISODES=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--train-device" ( set "TRAIN_DEVICE=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--train-batch-size" ( set "TRAIN_BATCH=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--python" ( set "PYTHON=%~2" & shift & shift & goto parse_args )
 if "%~1"=="--dashboard-only" ( goto dashboard_only )
 if "%~1"=="--help" goto show_help
 if "%~1"=="-h" goto show_help
@@ -66,8 +80,25 @@ echo   --rebuild          Force a clean rebuild (default: reuse existing build)
 echo   --dashboard-only   Start dashboard only (skip build/run)
 echo   --help, -h         Show this help message
 echo.
+echo ML policy options:
+echo   --train            Train the MAPPO policy, export it to ONNX, and run the
+echo                      engine with it. Uses the GPU when a CUDA build of
+echo                      PyTorch is installed.
+echo   --train-city NAME  City to train on (default: toy)
+echo   --train-episodes N Training episodes (default: 200; 500 reaches the
+echo                      documented toy convergence result)
+echo   --train-device DEV auto (CUDA when available, else CPU), cpu, cuda,
+echo                      cuda:N (default: auto)
+echo   --train-batch-size N PPO minibatch size; 0 (default) scales it with
+echo                      the sample count, which keeps the GPU busy on city
+echo                      graphs
+echo   --policy PATH      ONNX policy for the engine (e.g. ml\policy.onnx)
+echo   --python PATH      Python interpreter used for training (default: python)
+echo.
 echo Examples:
 echo   run.bat
+echo   run.bat --train
+echo   run.bat --train --train-city piedmont --train-episodes 500 --train-device cuda
 echo   run.bat --city chicago --agents 2000 --duration 10
 echo   run.bat --city chicago --od data\chicago\od_matrix.json --duration 60
 echo   run.bat --fast --no-ws --od data\chicago\od_matrix.json --duration 60 --journey data\chicago\journey_times.csv
@@ -89,8 +120,8 @@ exit /b 0
 :build
 if "%REBUILD%"=="0" if exist "engine\build\engine.exe" (
     echo [build] engine.exe found - skipping configure/build
-    echo         (pass --rebuild to force a clean rebuild)
-    goto run_engine
+    echo         pass --rebuild to force a clean rebuild
+    goto train
 )
 
 echo [1/3] Configuring CMake...
@@ -114,17 +145,54 @@ if errorlevel 1 (
 
 cd ..\..
 
+:train
+if "%TRAIN%"=="0" goto run_engine
+echo.
+echo ============================================
+echo   Training MARL policy
+echo ============================================
+echo   City: %TRAIN_CITY%   Episodes: %TRAIN_EPISODES%   Device: %TRAIN_DEVICE%
+echo.
+cd ml
+%PYTHON% -u -m train.train --city %TRAIN_CITY% --episodes %TRAIN_EPISODES% --device %TRAIN_DEVICE% --batch-size %TRAIN_BATCH% --checkpoint-interval 50 --log-interval 10
+if errorlevel 1 (
+    echo ERROR: Training failed!
+    cd ..
+    exit /b 1
+)
+set "LAST_CKPT="
+for /f "delims=" %%f in ('dir /b /o-n "checkpoints\%TRAIN_CITY%\*.pt" 2^>nul') do if not defined LAST_CKPT set "LAST_CKPT=checkpoints\%TRAIN_CITY%\%%f"
+if not defined LAST_CKPT (
+    echo ERROR: no checkpoint was written to checkpoints\%TRAIN_CITY%
+    cd ..
+    exit /b 1
+)
+echo Exporting ONNX policy from %LAST_CKPT% ...
+%PYTHON% -u -m export.export_onnx --checkpoint "%LAST_CKPT%" --output policy.onnx
+if errorlevel 1 (
+    echo ERROR: ONNX export failed!
+    cd ..
+    exit /b 1
+)
+cd ..
+set "POLICY=ml\policy.onnx"
+echo Policy ready: ml\policy.onnx
+
 :run_engine
 echo.
-echo [3/3] Starting dashboard...
-cd dashboard
-if not exist "node_modules" (
-    echo Installing dashboard dependencies...
-    call npm install
+if "%NO_WS%"=="1" (
+    echo [3/4] Skipping dashboard, --no-ws was given...
+) else (
+    echo [3/4] Starting dashboard...
+    cd dashboard
+    if not exist "node_modules" (
+        echo Installing dashboard dependencies...
+        call npm install
+    )
+    start "" cmd /c "npm run dev"
+    %SystemRoot%\System32\timeout.exe /t 3 /nobreak >nul
+    cd ..
 )
-start "" cmd /c "npm run dev"
-%SystemRoot%\System32\timeout.exe /t 3 /nobreak >nul
-cd ..
 
 echo.
 echo [4/4] Running simulation...
@@ -138,14 +206,19 @@ if "%OD_PATH%"=="" (
 )
 echo Duration: %DURATION% min
 echo.
-echo Dashboard: http://localhost:5173
-echo WebSocket: ws://localhost:9001
+if "%NO_WS%"=="1" (
+    rem No dashboard means no way to pick a city, so the engine must run headless.
+    set "FAST=1"
+) else (
+    echo Dashboard: http://localhost:5173
+    echo WebSocket: ws://localhost:9001
+)
 echo.
 if "%FAST%"=="1" (
     echo Mode: headless -- the engine exits when the simulation finishes.
 ) else (
 echo  NOTE: The engine idles until you pick a city on the dashboard. Selecting
-echo  a city starts that simulation (agents respawn so traffic stays live),
+echo  a city starts that simulation - agents respawn so traffic stays live -
 echo  and you can switch cities anytime. --duration only applies in --fast mode.
 echo  Press Ctrl+C to stop the engine.
 )
@@ -161,6 +234,7 @@ if "%OD_PATH%"=="" (
 )
 if not "%JOURNEY_PATH%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --journey %JOURNEY_PATH%"
 if not "%CHAOS%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --chaos %CHAOS%"
+if not "%POLICY%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --policy %POLICY%"
 if "%FAST%"=="1" set "ENGINE_ARGS=!ENGINE_ARGS! --fast"
 if "%NO_WS%"=="1" set "ENGINE_ARGS=!ENGINE_ARGS! --no-ws"
 

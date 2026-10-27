@@ -5,6 +5,7 @@ comparative benchmarking harness for the 12-algorithm inventory.
 """
 
 import abc
+import argparse
 import json
 import os
 import sys
@@ -20,6 +21,7 @@ if ml_root not in sys.path:
     sys.path.insert(0, ml_root)
 
 from env.nexus_sim_env import NexusSimEnv
+from train.device import describe_device, resolve_device
 
 
 class SingleAgentNexusSimEnv(gym.Env):
@@ -51,9 +53,10 @@ class SingleAgentNexusSimEnv(gym.Env):
 class BaseTrainer(abc.ABC):
     """Abstract base class for all 12 RL algorithms in NexusSim inventory."""
 
-    def __init__(self, algo_name: str, city: str = "toy"):
+    def __init__(self, algo_name: str, city: str = "toy", device: str = "auto"):
         self.algo_name = algo_name
         self.city = city
+        self.device = resolve_device(device)
         self.env = SingleAgentNexusSimEnv(city=city)
 
     @abc.abstractmethod
@@ -63,6 +66,23 @@ class BaseTrainer(abc.ABC):
     @abc.abstractmethod
     def evaluate(self, episodes: int = 10):
         pass
+
+
+def parse_device_arg(description: str) -> argparse.Namespace:
+    """Shared CLI for the algorithm suites: selects the compute device."""
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument(
+        "--device", default=os.environ.get("NEXUS_DEVICE", "auto"),
+        help="compute device: auto (CUDA when available, else CPU), cpu, "
+             "cuda or cuda:N",
+    )
+    return parser.parse_args()
+
+
+def report_device(trainers) -> None:
+    """Print the device the suite runs on."""
+    devices = {describe_device(t.device) for t in trainers}
+    print("Device:", ", ".join(sorted(devices)))
 
 
 def run_benchmark(trainers, episodes=50):

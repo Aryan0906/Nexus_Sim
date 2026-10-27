@@ -83,6 +83,12 @@ class NexusSimEnv(gym.Env):
                 decision_interval=self.decision_interval,
                 start_hour=self.start_hour,
             )
+        if isinstance(self.sim, VectorizedTrafficSim):
+            # Zone weights per simulation index, resolved once per episode
+            # instead of once per step.
+            self._zone_weights_list = [
+                self.zone_weights[int(iid)] for iid in self.sim.intersections
+            ]
         self.step_count = 0
         obs = self._observe()
         return obs, {}
@@ -127,23 +133,20 @@ class NexusSimEnv(gym.Env):
         self.step_count += 1
 
         from .reward import combined_reward as _cr
-        q_arr = self.sim.queues
-        total_queue = q_arr.sum(axis=1)
-        pressure_terms = [-float(total_queue[i]) for i in range(self.sim.N)]
-        zone_waits = [float(metrics["zone_wait"][int(self.sim.intersections[i])])
-                      for i in range(self.sim.N)]
-        weights = [self.zone_weights[int(self.sim.intersections[i])]
-                   for i in range(self.sim.N)]
+        # The vectorized sim already exposes per-intersection arrays in
+        # simulation-index order, so no per-intersection dict rebuild is
+        # needed here.
+        pressure_terms = (-self.sim.queues.sum(axis=1)).tolist()
+        zone_waits = metrics["zone_wait"].tolist()
+        weights = self._zone_weights_list
         reward_out = _cr(pressure_terms, zone_waits, self.alpha, self.beta, weights)
-        rewards = {
-            int(self.sim.intersections[i]): reward_out["rewards"][i]
-            for i in range(self.sim.N)
-        }
+        rewards_arr = reward_out["rewards"]
+        ids = self.sim.intersections
+        rewards = {int(ids[i]): rewards_arr[i] for i in range(self.sim.N)}
 
         truncated = self.step_count >= self.episode_steps
         obs_arr = self.sim.build_observations_vec(self.decision_interval)
-        agents = self.graph["intersections"]
-        obs = {int(agents[i]): obs_arr[i] for i in range(self.sim.N)}
+        obs = {int(ids[i]): obs_arr[i] for i in range(self.sim.N)}
         info = {
             "mean_pressure": reward_out["mean_pressure"],
             "equity": reward_out["equity"],

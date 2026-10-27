@@ -21,7 +21,7 @@ here = os.path.dirname(os.path.abspath(__file__))
 if here not in sys.path:
     sys.path.insert(0, here)
 
-from base_trainer import BaseTrainer, run_benchmark
+from base_trainer import BaseTrainer, parse_device_arg, report_device, run_benchmark
 
 
 class ContinuousActor(nn.Module):
@@ -59,12 +59,12 @@ class ContinuousCritic(nn.Module):
 # 1. DDPG Trainer
 # -------------------------------------------------------------
 class DDPGTrainer(BaseTrainer):
-    def __init__(self, city="toy", gamma=0.95, lr=1e-3):
-        super().__init__("DDPG", city=city)
+    def __init__(self, city="toy", gamma=0.95, lr=1e-3, device="auto"):
+        super().__init__("DDPG", city=city, device=device)
         self.gamma = gamma
         obs_dim = self.env.observation_space.shape[0]
-        self.actor = ContinuousActor(obs_dim, 1)
-        self.critic = ContinuousCritic(obs_dim, 1)
+        self.actor = ContinuousActor(obs_dim, 1).to(self.device)
+        self.critic = ContinuousCritic(obs_dim, 1).to(self.device)
         self.actor_opt = optim.Adam(self.actor.parameters(), lr=lr)
         self.critic_opt = optim.Adam(self.critic.parameters(), lr=lr)
 
@@ -74,19 +74,19 @@ class DDPGTrainer(BaseTrainer):
             done = False
             while not done:
                 with torch.no_grad():
-                    t_obs = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+                    t_obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
                     continuous_action = self.actor(t_obs).item()
                     discrete_action = 1 if continuous_action > 0 else 0
 
                 next_obs, reward, done, _, _ = self.env.step(discrete_action)
 
-                t_next_obs = torch.tensor(next_obs, dtype=torch.float32).unsqueeze(0)
-                t_action = torch.tensor([[continuous_action]], dtype=torch.float32)
+                t_next_obs = torch.tensor(next_obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+                t_action = torch.tensor([[continuous_action]], dtype=torch.float32, device=self.device)
 
                 # Train critic
                 target_q = reward + self.gamma * self.critic(t_next_obs, self.actor(t_next_obs)).item() * (1 - int(done))
                 current_q = self.critic(t_obs, t_action)
-                c_loss = nn.MSELoss()(current_q, torch.tensor([[target_q]], dtype=torch.float32))
+                c_loss = nn.MSELoss()(current_q, torch.tensor([[target_q]], dtype=torch.float32, device=self.device))
 
                 self.critic_opt.zero_grad()
                 c_loss.backward()
@@ -108,7 +108,7 @@ class DDPGTrainer(BaseTrainer):
             ep_rew = 0.0
             while not done:
                 with torch.no_grad():
-                    t_obs = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+                    t_obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
                     c_act = self.actor(t_obs).item()
                     d_act = 1 if c_act > 0 else 0
                 obs, reward, done, _, _ = self.env.step(d_act)
@@ -121,11 +121,11 @@ class DDPGTrainer(BaseTrainer):
 # 2. TD3 Trainer
 # -------------------------------------------------------------
 class TD3Trainer(DDPGTrainer):
-    def __init__(self, city="toy"):
-        super().__init__(city=city)
+    def __init__(self, city="toy", device="auto"):
+        super().__init__(city=city, device=device)
         self.algo_name = "TD3"
         obs_dim = self.env.observation_space.shape[0]
-        self.critic2 = ContinuousCritic(obs_dim, 1)
+        self.critic2 = ContinuousCritic(obs_dim, 1).to(self.device)
         self.critic2_opt = optim.Adam(self.critic2.parameters(), lr=1e-3)
 
     def evaluate(self, episodes=10):
@@ -138,8 +138,8 @@ class TD3Trainer(DDPGTrainer):
 # 3. SAC Trainer
 # -------------------------------------------------------------
 class SACTrainer(DDPGTrainer):
-    def __init__(self, city="toy"):
-        super().__init__(city=city)
+    def __init__(self, city="toy", device="auto"):
+        super().__init__(city=city, device=device)
         self.algo_name = "SAC"
 
     def evaluate(self, episodes=10):
@@ -149,11 +149,13 @@ class SACTrainer(DDPGTrainer):
 
 
 def main():
+    args = parse_device_arg("Continuous control RL inventory benchmark")
     trainers = [
-        DDPGTrainer(city="toy"),
-        TD3Trainer(city="toy"),
-        SACTrainer(city="toy"),
+        DDPGTrainer(city="toy", device=args.device),
+        TD3Trainer(city="toy", device=args.device),
+        SACTrainer(city="toy", device=args.device),
     ]
+    report_device(trainers)
 
     res = run_benchmark(trainers, episodes=20)
     print("\nPhase 22 Continuous Control RL Inventory Benchmark Results:")

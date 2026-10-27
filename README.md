@@ -15,7 +15,7 @@
 [![AI & ML](https://img.shields.io/badge/PyTorch_2.4-CUDA_12.4-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](ml/)
 [![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-0.04--0.13ms_p95_measured-005CED?style=for-the-badge&logo=onnx&logoColor=white)](engine/src/ai/)
 [![Docker Ready](https://img.shields.io/badge/Docker-Compose_Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](docker-compose.yml)
-[![Tests Passing](https://img.shields.io/badge/Tests-183%2F183_Passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
+[![Tests Passing](https://img.shields.io/badge/Tests-199%2F200_Passing-brightgreen?style=for-the-badge&logo=pytest&logoColor=white)](#testing)
 
 <br/>
 
@@ -30,7 +30,7 @@
   NexusSim models real road topologies from <b>OpenStreetMap</b>, simulates tens of thousands of heterogeneous vehicles with physics-based car-following, executes decentralized AI signal control, measures algorithmic equity, and integrates a unified <b>48-algorithm portfolio</b> across <b>Reinforcement Learning, Soft Computing, Computer Vision, and Natural Language Processing</b>.
 </p>
 
-[Quickstart](#quickstart) • [Architecture](#architecture) • [Algorithm Portfolio](#48-algorithm-portfolio) • [Multi-City Benchmarks](#multi-city-benchmarks) • [Testing](#testing) • [Documentation](docs/)
+[Quickstart](#quickstart) • [Architecture](#architecture) • [Algorithm Portfolio](#48-algorithm-portfolio) • [Multi-City Benchmarks](#multi-city-benchmarks) • [Testing](#testing) • [Documentation](docs/) • [Comprehensive Spec](docs/NEXUS-SIM-DOCUMENTATION.md)
 
 ---
 
@@ -196,6 +196,9 @@ Empirical performance evaluation comparing the learned multi-agent policy (MAPPO
 ```bat
 :: Builds engine, starts dashboard at localhost:3000, and launches Piedmont demo
 run.bat
+
+:: Or train the MAPPO signal-control policy on GPU and run the engine with it
+run.bat --train --train-city piedmont --train-device cuda
 
 :: Or launch the complete multi-service stack with all sidecars
 run_full_system.bat

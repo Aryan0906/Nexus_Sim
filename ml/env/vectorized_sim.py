@@ -26,6 +26,7 @@ class VectorizedTrafficSim:
 
         self.sim_time = 0.0
         self.completed = 0.0
+        self.total_wait_seconds = 0.0
 
         self.queues = np.zeros((self.N, 4), dtype=np.float64)
         self.wait_acc = np.zeros((self.N, 4), dtype=np.float64)
@@ -86,6 +87,7 @@ class VectorizedTrafficSim:
     def reset(self):
         self.sim_time = 0.0
         self.completed = 0.0
+        self.total_wait_seconds = 0.0
         self.queues[:] = 0
         self.wait_acc[:] = 0
         self.phase[:] = 0
@@ -164,6 +166,7 @@ class VectorizedTrafficSim:
             "zone_wait": zone_wait_arr,
             "sim_time": self.sim_time,
             "completed": self.completed,
+            "avg_wait_seconds": self.total_wait_seconds / max(1.0, self.completed),
         }
 
     def _substep(self):
@@ -203,6 +206,7 @@ class VectorizedTrafficSim:
             self.queues += counts.reshape(self.N, 4)
 
         self.wait_acc += self.queues * self.dt
+        self.total_wait_seconds += float((self.queues * self.dt).sum())
         self.sim_time += self.dt
 
         self.timer -= self.dt

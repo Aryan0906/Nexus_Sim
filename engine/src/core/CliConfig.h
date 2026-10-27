@@ -2,6 +2,7 @@
 #include <string>
 #include <iostream>
 #include <cstdlib>
+#include <filesystem>
 
 namespace nexussim {
 
@@ -117,6 +118,17 @@ public:
             else if (arg == "--fast") cfg.fast = true;
             else if (arg == "--no-ws") cfg.no_ws = true;
             else if (arg == "--profile") cfg.profile = true;
+        }
+
+        if (cfg.ssl_cert.empty() && cfg.ssl_key.empty() && !cfg.no_ws) {
+            const char* env_cert = std::getenv("SSL_CERT");
+            const char* env_key = std::getenv("SSL_KEY");
+            std::string default_cert = env_cert ? env_cert : "certs/server.crt";
+            std::string default_key = env_key ? env_key : "certs/server.key";
+            if (std::filesystem::exists(default_cert) && std::filesystem::exists(default_key)) {
+                cfg.ssl_cert = default_cert;
+                cfg.ssl_key = default_key;
+            }
         }
 
         return cfg;

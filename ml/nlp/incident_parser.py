@@ -24,16 +24,30 @@ if here not in sys.path:
 
 
 class IncidentParser:
-    def __init__(self, graph_dict=None):
-        self.street_gazetteer = {
-            "michigan ave": [101, 102],
-            "state street": [103, 104],
-            "wacker drive": [105, 106],
-            "grand ave": [107, 108],
-            "chicago ave": [109, 110],
-            "halsted st": [111, 112],
-            "ashland ave": [113, 114],
-        }
+    def __init__(self, graph_dict=None, gazetteer_path=None):
+        # Street-name -> edge-id gazetteer. Prefers an external JSON file so
+        # the mapping can be derived per city (e.g. from the OSM export) rather
+        # than being hardcoded. Falls back to a small Chicago seed set.
+        self.street_gazetteer = {}
+        if gazetteer_path and os.path.isfile(gazetteer_path):
+            try:
+                with open(gazetteer_path) as f:
+                    self.street_gazetteer = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                self.street_gazetteer = {}
+        if not self.street_gazetteer:
+            self.street_gazetteer = {
+                "michigan ave": [101, 102],
+                "state street": [103, 104],
+                "wacker drive": [105, 106],
+                "grand ave": [107, 108],
+                "chicago ave": [109, 110],
+                "halsted st": [111, 112],
+                "ashland ave": [113, 114],
+            }
+        # Optional graph-derived context (nodes/edges) kept for future use when
+        # graph.json carries street names; not required to parse incidents.
+        self.graph_dict = graph_dict or {}
 
     def parse(self, text: str):
         q = text.lower()

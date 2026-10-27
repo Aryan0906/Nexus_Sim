@@ -12,6 +12,8 @@ import os
 import random
 import sys
 import time
+import urllib.error
+import urllib.request
 
 try:
     import cv2
@@ -25,6 +27,65 @@ if here not in sys.path:
     sys.path.insert(0, here)
 
 from validate import _root, _load_od_matrix
+
+
+def _fetch_traffic_tile(city_bbox, hour):
+    """Fetch a real traffic tile from a ToS-compliant provider.
+
+    Tries (in order) Mapbox Traffic Tiles (``MAPBOX_ACCESS_TOKEN``) and
+    TomTom Traffic Flow tiles (``TOMTOM_API_KEY``). On any failure -- missing
+    key, network error, or non-200 response -- returns ``None`` so the caller
+    can fall back to the synthetic tile. No key is ever committed; keys must
+    be supplied through the environment (BR-6).
+    """
+    if not HAS_OPENCV or city_bbox is None:
+        return None
+    min_lat, min_lon, max_lat, max_lon = city_bbox
+    # Use a coarse zoom so a single tile covers the city bbox area of interest.
+    z = 11
+    # Slippy tile numbers for the bbox centre.
+    import math
+    def deg2num(lat, lon, zz):
+        n = 2.0 ** zz
+        xtile = int((lon + 180.0) / 360.0 * n)
+        ytile = int((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n)
+        return xtile, ytile
+    cx, cy = (min_lat + max_lat) / 2.0, (min_lon + max_lon) / 2.0
+    tx, ty = deg2num(cx, cy, z)
+
+    token = os.environ.get("MAPBOX_ACCESS_TOKEN")
+    if token:
+        url = ("https://api.mapbox.com/traffic/v1/tile/{z}/{x}/{y}.png"
+               "?access_token={tok}").format(z=z, x=tx, y=ty, tok=token)
+        img = _download_tile(url)
+        if img is not None:
+            return img
+
+    key = os.environ.get("TOMTOM_API_KEY")
+    if key:
+        url = ("https://api.tomtom.com/traffic/services/4/flowSegmentData/"
+               "absolute/{z}/{x}/{y}/png?key={k}").format(z=z, x=tx, y=ty, k=key)
+        img = _download_tile(url)
+        if img is not None:
+            return img
+    return None
+
+
+def _download_tile(url, timeout=10):
+    """Download a tile URL into a BGR numpy array, or None on failure."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "NexusSim-CV/1.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return None
+            data = resp.read()
+    except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError):
+        return None
+    if not HAS_OPENCV or not data:
+        return None
+    arr = np.frombuffer(data, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    return img
 
 
 def classify_tile_classical(img_hsv):
@@ -120,13 +181,28 @@ def extract_city_cv_congestion(city="chicago"):
 
     zones_data = {}
 
+    # Per-city traffic tile bounding box from pipeline/cities.yaml (cv_bbox).
+    # Falls back to a city-agnostic box when not configured.
+    city_bbox = None
+    try:
+        import yaml  # type: ignore
+        cities_path = os.path.join(root, "pipeline", "cities.yaml")
+        if os.path.isfile(cities_path):
+            with open(cities_path) as cf:
+                cities_cfg = yaml.safe_load(cf) or {}
+            city_cfg = cities_cfg.get(city, {})
+            city_bbox = city_cfg.get("cv_bbox")
+    except Exception:
+        city_bbox = None
+
     for zid in zone_ids:
         hourly_data = {}
         for hour in range(24):
-            # Synthetic 64x64 sample tile in BGR
-            if HAS_OPENCV:
+            # Prefer a real traffic-flow tile from Mapbox/TomTom; fall back to
+            # a synthetic tile when no API key is configured or the fetch fails.
+            img = _fetch_traffic_tile(city_bbox, hour)
+            if img is None:
                 sample_tile = np.zeros((64, 64, 3), dtype=np.uint8)
-                # Draw road lines depending on hour (peak hours get red)
                 if 7 <= hour <= 9 or 16 <= hour <= 18:
                     # Peak congestion (Red/Orange pixels)
                     sample_tile[28:36, :] = [0, 0, 255]
@@ -136,21 +212,11 @@ def extract_city_cv_congestion(city="chicago"):
                 else:
                     # Off peak (Green)
                     sample_tile[28:36, :] = [0, 255, 0]
+                img = sample_tile
 
-                img_hsv = cv2.cvtColor(sample_tile, cv2.COLOR_BGR2HSV)
-                c_level, c_conf = classify_tile_classical(img_hsv)
-                ml_level, ml_conf = classify_tile_ml(sample_tile)
-            else:
-                if 7 <= hour <= 9 or 16 <= hour <= 18:
-                    c_level, c_conf = 3, 0.92
-                    ml_level, ml_conf = 3, 0.94
-                elif 10 <= hour <= 15:
-                    c_level, c_conf = 1, 0.88
-                    ml_level, ml_conf = 1, 0.90
-                else:
-                    c_level, c_conf = 0, 0.95
-                    ml_level, ml_conf = 0, 0.96
-
+            img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            c_level, c_conf = classify_tile_classical(img_hsv)
+            ml_level, ml_conf = classify_tile_ml(img)
             hourly_data[str(hour)] = {
                 "classical": {"level": c_level, "confidence": c_conf},
                 "cnn": {"level": ml_level, "confidence": ml_conf},

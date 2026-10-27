@@ -99,6 +99,7 @@ class REINFORCETrainer(BaseTrainer):
 
     def evaluate(self, episodes=10):
         rewards = []
+        wait_samples = []
         for _ in range(episodes):
             obs, _ = self.env.reset()
             done = False
@@ -107,10 +108,12 @@ class REINFORCETrainer(BaseTrainer):
                 with torch.no_grad():
                     t_obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
                     action = self.policy(t_obs).logits.argmax(dim=-1).item()
-                obs, reward, done, _, _ = self.env.step(action)
+                obs, reward, done, _, info = self.env.step(action)
                 ep_rew += reward
+                wait_samples.append(info.get("avg_wait", 0.0))
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
+        mean_wait = float(np.mean(wait_samples)) if wait_samples else None
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": mean_wait}
 
 
 # -------------------------------------------------------------
@@ -161,6 +164,7 @@ class A2CTrainer(BaseTrainer):
 
     def evaluate(self, episodes=10):
         rewards = []
+        wait_samples = []
         for _ in range(episodes):
             obs, _ = self.env.reset()
             done = False
@@ -169,10 +173,12 @@ class A2CTrainer(BaseTrainer):
                 with torch.no_grad():
                     t_obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
                     action = self.policy(t_obs).logits.argmax(dim=-1).item()
-                obs, reward, done, _, _ = self.env.step(action)
+                obs, reward, done, _, info = self.env.step(action)
                 ep_rew += reward
+                wait_samples.append(info.get("avg_wait", 0.0))
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
+        mean_wait = float(np.mean(wait_samples)) if wait_samples else None
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": mean_wait}
 
 
 # -------------------------------------------------------------
@@ -243,6 +249,7 @@ class SingleAgentPPOTrainer(BaseTrainer):
 
     def evaluate(self, episodes=10):
         rewards = []
+        wait_samples = []
         for _ in range(episodes):
             obs, _ = self.env.reset()
             done = False
@@ -251,10 +258,12 @@ class SingleAgentPPOTrainer(BaseTrainer):
                 with torch.no_grad():
                     t_obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
                     action = int(self.policy(t_obs).logits.argmax(dim=-1).item())
-                obs, reward, done, _, _ = self.env.step(action)
+                obs, reward, done, _, info = self.env.step(action)
                 ep_rew += reward
+                wait_samples.append(info.get("avg_wait", 0.0))
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
+        mean_wait = float(np.mean(wait_samples)) if wait_samples else None
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": mean_wait}
 
 
 def main():

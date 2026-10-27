@@ -8,8 +8,12 @@
 export const FRONTEND_PORT = 3000;
 export const BACKEND_PORT = 8000;
 
-export const BACKEND_HTTP = `https://localhost:${BACKEND_PORT}`;
-export const BACKEND_WS = `wss://localhost:${BACKEND_PORT}`;
+const isBrowser = typeof window !== 'undefined';
+const wsProto = isBrowser && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const host = isBrowser ? window.location.host : `localhost:${FRONTEND_PORT}`;
+
+export const BACKEND_HTTP = isBrowser ? '' : `https://localhost:${BACKEND_PORT}`;
+export const BACKEND_WS = isBrowser ? `${wsProto}//${host}` : `wss://localhost:${BACKEND_PORT}`;
 
 export const ENDPOINTS = {
   /** C++ Simulation Engine WebSocket stream (via Gateway) */
@@ -39,3 +43,4 @@ export const ENDPOINTS = {
   /** Public emissions estimate (pure computation) */
   EMISSIONS_ESTIMATE: `${BACKEND_HTTP}/api/emissions/estimate`,
 };
+

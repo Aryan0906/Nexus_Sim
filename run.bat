@@ -114,9 +114,15 @@ if not exist "node_modules" (
 )
 start "" cmd /c "npm run dev"
 cd ..
-echo Dashboard: http://localhost:3000
-echo Backend:   http://localhost:8000
+
+set "PY_CMD=python"
+if exist ".venv\Scripts\python.exe" set "PY_CMD=.venv\Scripts\python.exe"
+echo Starting unified backend gateway (port 8000)...
+start "" cmd /c "!PY_CMD! -m gateway.server"
+echo Dashboard: https://localhost:3000
+echo Backend:   https://localhost:8000
 exit /b 0
+
 
 :build
 if "%REBUILD%"=="0" if exist "engine\build\engine.exe" (
@@ -195,10 +201,13 @@ if "%NO_WS%"=="1" (
     cd ..
 )
 
-where python >nul 2>nul
+set "PY_CMD=python"
+if exist ".venv\Scripts\python.exe" set "PY_CMD=.venv\Scripts\python.exe"
+
+where !PY_CMD! >nul 2>nul
 if !errorlevel! equ 0 (
     echo Starting unified backend gateway ^(port 8000^)...
-    start "" cmd /c "python -m gateway.server"
+    start "" cmd /c "!PY_CMD! -m gateway.server"
     ping -n 3 127.0.0.1 >nul
 )
 
@@ -218,8 +227,8 @@ if "%NO_WS%"=="1" (
     rem No dashboard means no way to pick a city, so the engine must run headless.
     set "FAST=1"
 ) else (
-    echo Dashboard:       http://localhost:3000
-    echo Backend Gateway: http://localhost:8000 ^(WebSocket: ws://localhost:8000/ws^)
+    echo Dashboard:       https://localhost:3000
+    echo Backend Gateway: https://localhost:8000 ^(WebSocket: wss://localhost:8000/ws^)
 )
 echo.
 if "%FAST%"=="1" (
@@ -245,6 +254,9 @@ if not "%CHAOS%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --chaos %CHAOS%"
 if not "%POLICY%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --policy %POLICY%"
 if "%FAST%"=="1" set "ENGINE_ARGS=!ENGINE_ARGS! --fast"
 if "%NO_WS%"=="1" set "ENGINE_ARGS=!ENGINE_ARGS! --no-ws"
+if exist "certs\server.crt" if exist "certs\server.key" (
+    set "ENGINE_ARGS=!ENGINE_ARGS! --ssl-cert certs\server.crt --ssl-key certs\server.key"
+)
 
 echo Engine: engine\build\engine.exe %ENGINE_ARGS%
 echo.

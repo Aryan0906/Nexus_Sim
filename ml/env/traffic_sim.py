@@ -45,6 +45,10 @@ class TrafficSim:
         self.completed = 0
         self._arrivals = {i: [0] * 4 for i in self.intersections}
         self._accumulate_arrivals()
+        # Cumulative wait-time accounting (vehicle-seconds) so the environment
+        # can report citywide average wait time per episode for the PRD
+        # ">= 15% wait reduction" metric.
+        self.total_wait_seconds = 0.0
 
     def _rate(self, intersection: int, approach: int, hour: float) -> float:
         base = self.graph["base_rate"][intersection][approach]
@@ -95,9 +99,12 @@ class TrafficSim:
             self.queues[downstream][approach] += 1
 
     def _step_wait(self) -> None:
+        interval_wait = 0.0
         for i in self.intersections:
             for a in range(4):
                 self.wait_acc[i][a] += self.queues[i][a] * self.dt
+                interval_wait += self.queues[i][a] * self.dt
+        self.total_wait_seconds += interval_wait
 
     def _snapshot_interval_metrics(self) -> dict:
         avg_queue = {}
@@ -108,7 +115,11 @@ class TrafficSim:
             zone_wait[i] = float(sum(per_approach))
             avg_queue[i] = zone_wait[i]
             self.wait_acc[i] = [0.0] * 4
-        return {"avg_queue": avg_queue, "zone_wait": zone_wait}
+        return {
+            "avg_queue": avg_queue,
+            "zone_wait": zone_wait,
+            "avg_wait_seconds": self.total_wait_seconds / max(1, self.completed),
+        }
 
     def step(self, actions: dict) -> dict:
         """Advance one decision interval; apply ``actions`` at phase boundaries."""

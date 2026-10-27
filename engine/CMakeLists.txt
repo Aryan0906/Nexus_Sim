@@ -71,27 +71,58 @@ FetchContent_MakeAvailable(flatbuffers)
 # is the first stable line whose public headers are MinGW-compatible
 # (__stdcall instead of the MSVC-only _stdcall alias).
 option(ENABLE_ONNX "Enable ONNX Runtime inference support (AI signal mode)" ON)
-# Optional experiment: link the CUDA-enabled ONNX Runtime GPU package so the
-# engine can select the CUDA execution provider via --onnx-provider cuda/auto.
-# Requires CUDA/cuDNN runtime DLLs on PATH at run time; falls back to CPU.
-option(ENABLE_ONNX_CUDA "Use the ONNX Runtime GPU package (CUDA execution provider)" OFF)
+# ONNX Runtime package selection:
+#   OFF   - CPU-only ONNX Runtime (always works, no GPU)
+#   ON    - CUDA-enabled ONNX Runtime (build fails if GPU package unavailable)
+#   AUTO  - Try CUDA package first; fall back to CPU if download/link fails
+#           (recommended: dynamic GPU support wherever the machine allows)
+set(ENABLE_ONNX_CUDA "AUTO" CACHE STRING "ONNX Runtime package: OFF=CPU, ON=CUDA, AUTO=try-CUDA-then-CPU")
+set_property(CACHE ENABLE_ONNX_CUDA PROPERTY STRINGS OFF ON AUTO)
+
 if(ENABLE_ONNX)
-  if(ENABLE_ONNX_CUDA)
-    set(ORT_PKG "onnxruntime-win-x64-gpu-1.24.1.zip")
-    set(ORT_HASH "SHA256=176af2aade9eb9e429cd2a738aa5d71a1f20ec7123e4b99a382ad62b9db970fb")
-    set(ORT_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/${ORT_PKG}")
-  elseif(WIN32)
+  # Resolve the ONNX Runtime package URL/hash based on the selected mode.
+  if(ENABLE_ONNX_CUDA STREQUAL "OFF")
     set(ORT_PKG "onnxruntime-win-x64-1.24.1.zip")
     set(ORT_HASH "SHA256=c72736c16442cad417ee4f45e3e2fbd10778e70a0fc1cb0e86f028d766e525af")
     set(ORT_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/${ORT_PKG}")
-  else()
-    set(ORT_PKG "onnxruntime-linux-x64-1.24.1.tgz")
-    set(ORT_HASH "SHA256=9142552248b735920f9390027e4512a2cacf8946a1ffcbe9071a5c210531026f")
+    set(ORT_CUDA_REQUESTED FALSE)
+  elseif(ENABLE_ONNX_CUDA STREQUAL "ON")
+    set(ORT_PKG "onnxruntime-win-x64-gpu-1.24.1.zip")
+    set(ORT_HASH "SHA256=176af2aade9eb9e429cd2a738aa5d71a1f20ec7123e4b99a382ad62b9db970fb")
     set(ORT_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/${ORT_PKG}")
+    set(ORT_CUDA_REQUESTED TRUE)
+  else()
+    # AUTO mode: probe whether the CUDA package can be downloaded.
+    set(ORT_PKG "onnxruntime-win-x64-gpu-1.24.1.zip")
+    set(ORT_HASH "SHA256=176af2aade9eb9e429cd2a738aa5d71a1f20ec7123e4b99a382ad62b9db970fb")
+    set(ORT_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/${ORT_PKG}")
+    set(ORT_CPU_PKG "onnxruntime-win-x64-1.24.1.zip")
+    set(ORT_CPU_HASH "SHA256=c72736c16442cad417ee4f45e3e2fbd10778e70a0fc1cb0e86f028d766e525af")
+    set(ORT_CPU_URL "https://github.com/microsoft/onnxruntime/releases/download/v1.24.1/${ORT_CPU_PKG}")
+
+    # Probe download of the GPU package header to test reachability without
+    # failing the configure if the network/package is unavailable.
+    file(DOWNLOAD "${ORT_URL}" "${CMAKE_CURRENT_BINARY_DIR}/ort_probe.zip"
+         TIMEOUT 30
+         STATUS _ort_probe_status
+         EXPECTED_HASH "${ORT_HASH}"
+         LOG _ort_probe_log)
+    list(GET _ort_probe_status 0 _ort_probe_code)
+    list(GET _ort_probe_status 1 _ort_probe_msg)
+
+    if(_ort_probe_code EQUAL 0)
+      set(ORT_CUDA_REQUESTED TRUE)
+      message(STATUS "ONNX Runtime: CUDA package reachable — enabling CUDA execution provider")
+    else()
+      message(STATUS "ONNX Runtime: CUDA package unavailable (${_ort_probe_msg}) — falling back to CPU")
+      set(ORT_PKG "${ORT_CPU_PKG}")
+      set(ORT_HASH "${ORT_CPU_HASH}")
+      set(ORT_URL "${ORT_CPU_URL}")
+      set(ORT_CUDA_REQUESTED FALSE)
+    endif()
   endif()
 
-  # Allow using a pre-extracted ONNX Runtime tree (required for the GPU package
-  # on connections where the 280 MB download is unreliable) via -DORT_ROOT=...
+  # Allow using a pre-extracted ONNX Runtime tree via -DORT_ROOT=...
   if(DEFINED ORT_ROOT AND EXISTS "${ORT_ROOT}/include/onnxruntime_cxx_api.h")
     add_library(onnxruntime_api SHARED IMPORTED GLOBAL)
     target_include_directories(onnxruntime_api INTERFACE "${ORT_ROOT}/include")
@@ -103,7 +134,7 @@ if(ENABLE_ONNX)
       set_target_properties(onnxruntime_api PROPERTIES
         IMPORTED_LOCATION "${ORT_ROOT}/lib/libonnxruntime.so")
     endif()
-    message(STATUS "Using pre-extracted ONNX Runtime at ${ORT_ROOT} (CUDA=${ENABLE_ONNX_CUDA})")
+    message(STATUS "Using pre-extracted ONNX Runtime at ${ORT_ROOT} (CUDA=${ORT_CUDA_REQUESTED})")
   else()
     FetchContent_Declare(
       onnxruntime
@@ -272,10 +303,31 @@ if(ENABLE_ONNX)
     else()
       set(ORT_DLL_PATH "${ORT_ROOT}/lib/onnxruntime.dll")
     endif()
+    # CUDA provider DLL + CUDA/cuDNN runtime DLLs (only when CUDA package used)
+    if(ORT_CUDA_REQUESTED)
+      set(ORT_CUDA_PROVIDER_DLL "${onnxruntime_SOURCE_DIR}/lib/onnxruntime_providers_cuda.dll")
+      set(ORT_CUDA_RUNTIME_DLLS
+        "${onnxruntime_SOURCE_DIR}/bin/cudart64_12.dll"
+        "${onnxruntime_SOURCE_DIR}/bin/cudnn64_8.dll"
+        "${onnxruntime_SOURCE_DIR}/bin/cublas64_12.dll"
+        "${onnxruntime_SOURCE_DIR}/bin/cublasLt64_12.dll")
+    endif()
     macro(copy_ort_dll target)
       add_custom_command(TARGET ${target} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ORT_DLL_PATH}"
                 "$<TARGET_FILE_DIR:${target}>")
+      if(ORT_CUDA_REQUESTED)
+        add_custom_command(TARGET ${target} POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different "${ORT_CUDA_PROVIDER_DLL}"
+                  "$<TARGET_FILE_DIR:${target}>")
+        foreach(dll ${ORT_CUDA_RUNTIME_DLLS})
+          if(EXISTS "${dll}")
+            add_custom_command(TARGET ${target} POST_BUILD
+              COMMAND ${CMAKE_COMMAND} -E copy_if_different "${dll}"
+                      "$<TARGET_FILE_DIR:${target}>")
+          endif()
+        endforeach()
+      endif()
     endmacro()
   endif()
 endif()

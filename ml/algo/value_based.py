@@ -66,6 +66,7 @@ class QLearningTrainer(BaseTrainer):
 
     def evaluate(self, episodes=10):
         rewards = []
+        wait_samples = []
         for _ in range(episodes):
             obs, _ = self.env.reset()
             done = False
@@ -73,12 +74,12 @@ class QLearningTrainer(BaseTrainer):
             while not done:
                 state = self._discretize(obs)
                 action = int(np.argmax(self.q_table.get(state, np.zeros(self.env.action_space.n))))
-                obs, reward, done, _, _ = self.env.step(action)
+                obs, reward, done, _, info = self.env.step(action)
                 ep_rew += reward
+                wait_samples.append(info.get("avg_wait", 0.0))
             rewards.append(ep_rew)
-        # mean_wait is intentionally not reported: the toy env does not expose
-        # a real wait-time signal, so a fabricated constant would be dishonest.
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
+        mean_wait = float(np.mean(wait_samples)) if wait_samples else None
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": mean_wait}
 
 
 # -------------------------------------------------------------
@@ -119,6 +120,7 @@ class SARSATrainer(BaseTrainer):
 
     def evaluate(self, episodes=10):
         rewards = []
+        wait_samples = []
         for _ in range(episodes):
             obs, _ = self.env.reset()
             done = False
@@ -126,10 +128,12 @@ class SARSATrainer(BaseTrainer):
             while not done:
                 state = self._discretize(obs)
                 action = int(np.argmax(self.q_table.get(state, np.zeros(self.env.action_space.n))))
-                obs, reward, done, _, _ = self.env.step(action)
+                obs, reward, done, _, info = self.env.step(action)
                 ep_rew += reward
+                wait_samples.append(info.get("avg_wait", 0.0))
             rewards.append(ep_rew)
-        return {"mean_reward": float(np.mean(rewards)), "mean_wait": None}
+        mean_wait = float(np.mean(wait_samples)) if wait_samples else None
+        return {"mean_reward": float(np.mean(rewards)), "mean_wait": mean_wait}
 
 
 # -------------------------------------------------------------
@@ -243,6 +247,7 @@ class DeepValueTrainer(BaseTrainer):
 
     def evaluate(self, episodes=10):
         rewards = []
+        wait_samples = []
         for _ in range(episodes):
             obs, _ = self.env.reset()
             done = False
@@ -251,13 +256,15 @@ class DeepValueTrainer(BaseTrainer):
                 with torch.no_grad():
                     t_obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
                     action = int(self.policy_net(t_obs).argmax(dim=-1).item())
-                obs, reward, done, _, _ = self.env.step(action)
+                obs, reward, done, _, info = self.env.step(action)
                 ep_rew += reward
+                wait_samples.append(info.get("avg_wait", 0.0))
             rewards.append(ep_rew)
 
+        mean_wait = float(np.mean(wait_samples)) if wait_samples else None
         return {
             "mean_reward": float(np.mean(rewards)),
-            "mean_wait": None,  # not measured; see catalog for reported values
+            "mean_wait": mean_wait,
         }
 
 

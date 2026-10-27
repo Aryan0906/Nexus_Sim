@@ -1,13 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
+REM ====================================================================
+REM  NexusSim — Unified System Launcher
+REM  Builds the C++ engine, optionally trains the MARL policy, and launches
+REM  the full multi-service stack (engine, gateway, sidecars) in a single
+REM  console window. Services are backgrounded (start /b) and log to logs\.
+REM ====================================================================
 
-echo ============================================
-echo   NexusSim Engine - Build ^& Run
-echo ============================================
-echo.
+if "%~1"=="--help" goto show_help
+if "%~1"=="-h" goto show_help
 
-set PATH=C:\msys64\mingw64\bin;%PATH%
-
+REM ---------------------- default configuration -----------------------
 set CITY=piedmont
 set AGENTS=500
 set DURATION=5
@@ -29,9 +32,11 @@ set TRAIN_EPISODES=200
 set TRAIN_DEVICE=auto
 set TRAIN_BATCH=0
 set PYTHON=python
+set DASHBOARD_ONLY=0
 
+REM ---------------------- parse arguments -----------------------------
 :parse_args
-if "%~1"=="" goto build
+if "%~1"=="" goto cuda_preflight
 if "%~1"=="--city" ( set "CITY=%~2" & shift & shift & goto parse_args )
 if "%~1"=="--agents" ( set "AGENTS=%~2" & shift & shift & goto parse_args )
 if "%~1"=="--duration" ( set "DURATION=%~2" & shift & shift & goto parse_args )
@@ -53,82 +58,102 @@ if "%~1"=="--train-episodes" ( set "TRAIN_EPISODES=%~2" & shift & shift & goto p
 if "%~1"=="--train-device" ( set "TRAIN_DEVICE=%~2" & shift & shift & goto parse_args )
 if "%~1"=="--train-batch-size" ( set "TRAIN_BATCH=%~2" & shift & shift & goto parse_args )
 if "%~1"=="--python" ( set "PYTHON=%~2" & shift & shift & goto parse_args )
-if "%~1"=="--dashboard-only" ( goto dashboard_only )
+if "%~1"=="--dashboard-only" ( set "DASHBOARD_ONLY=1" & shift & goto parse_args )
 if "%~1"=="--help" goto show_help
 if "%~1"=="-h" goto show_help
 shift
 goto parse_args
 
+REM ---------------------- show help -----------------------------------
 :show_help
 echo Usage: run.bat [OPTIONS]
 echo.
-echo Options:
-echo   --city NAME        City to run (fast/headless mode only; default: piedmont)
+echo Core options:
+echo   --city NAME        City to simulate (default: piedmont)
 echo   --agents N         Number of agents (uniform mode, default: 500)
-echo   --duration N       Duration in minutes (fast/headless mode only; default: 5)
-echo   --od PATH          OD demand matrix (real-traffic mode; e.g. data\chicago\od_matrix.json)
+echo   --duration N       Duration in minutes (default: 5)
+echo   --od PATH          OD demand matrix (real-traffic mode)
 echo   --demand-scale N   Scale factor for OD demand (auto if omitted)
-echo   --start-hour H     Simulation start hour 0-23 (OD mode, default: 8)
+echo   --start-hour H     Simulation start hour 0-23 (default: 8)
 echo   --speed-factor N   Congestion factor on IDM desired speeds (default: 0.55)
 echo   --route-spread N   Stochastic route-choice spread 0-1 (default: 0.2)
 echo   --chaos N          Lane-discipline chaos coefficient 0-1 (default: 0.1)
-echo   --journey PATH     Where to write journey times CSV (default: journey_times.csv)
+echo   --journey PATH     Where to write journey times CSV
 echo   --fast             Headless mode: no pacing, exits when sim finishes
 echo   --no-ws            Disable WebSocket server (no dashboard)
 echo   --debug            Build in Debug mode
-echo   --rebuild          Force a clean rebuild (default: reuse existing build)
+echo   --rebuild          Force a clean rebuild
 echo   --dashboard-only   Start dashboard only (skip build/run)
-echo   --help, -h         Show this help message
 echo.
 echo ML policy options:
-echo   --train            Train the MAPPO policy, export it to ONNX, and run the
-echo                      engine with it. Uses the GPU when a CUDA build of
-echo                      PyTorch is installed.
+echo   --train            Train the MAPPO policy, export to ONNX, run engine with it
 echo   --train-city NAME  City to train on (default: toy)
-echo   --train-episodes N Training episodes (default: 200; 500 reaches the
-echo                      documented toy convergence result)
-echo   --train-device DEV auto (CUDA when available, else CPU), cpu, cuda,
-echo                      cuda:N (default: auto)
-echo   --train-batch-size N PPO minibatch size; 0 (default) scales it with
-echo                      the sample count, which keeps the GPU busy on city
-echo                      graphs
-echo   --policy PATH      ONNX policy for the engine (e.g. ml\policy.onnx)
-echo   --python PATH      Python interpreter used for training (default: python)
+echo   --train-episodes N Training episodes (default: 200)
+echo   --train-device DEV auto (CUDA when available, else CPU), cpu, cuda, cuda:N
+echo   --train-batch-size N PPO minibatch size; 0 scales with sample count
+echo   --policy PATH      ONNX policy file for the engine (e.g. ml\policy.onnx)
+echo   --python PATH      Python interpreter (default: python)
 echo.
 echo Examples:
 echo   run.bat
-echo   run.bat --train
-echo   run.bat --train --train-city piedmont --train-episodes 500 --train-device cuda
+echo   run.bat --train --train-city piedmont --train-device cuda
 echo   run.bat --city chicago --agents 2000 --duration 10
 echo   run.bat --city chicago --od data\chicago\od_matrix.json --duration 60
-echo   run.bat --fast --no-ws --od data\chicago\od_matrix.json --duration 60 --journey data\chicago\journey_times.csv
-echo   run.bat --debug --agents 1000
+echo   run.bat --fast --no-ws --od data\chicago\od_matrix.json --duration 60
 echo   run.bat --dashboard-only
 exit /b 0
 
-:dashboard_only
-cd dashboard
-if not exist "node_modules" (
-    echo Installing dashboard dependencies...
-    call npm install
+REM ---------------------- CUDA preflight ------------------------------
+:cuda_preflight
+echo ====================================================================
+echo   NexusSim Unified System Launcher
+echo   City: %CITY%
+echo ====================================================================
+echo.
+
+REM ensure OpenSSL/zlib DLLs are on PATH (needed by engine.exe)
+set PATH=C:\msys64\mingw64\bin;%PATH%
+
+REM copy required runtime DLLs next to engine.exe (if it exists)
+if exist engine\build\engine.exe (
+    if exist "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" engine\build\ >nul
+    if exist "C:\msys64\mingw64\bin\libssl-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libssl-3-x64.dll" engine\build\ >nul
+    if exist "C:\msys64\mingw64\bin\zlib1.dll" copy /Y "C:\msys64\mingw64\bin\zlib1.dll" engine\build\ >nul
+    for %%d in ("engine\build\onnxruntime.dll") do if exist "%%d" copy /Y "%%d" engine\build\ >nul
 )
-start "" cmd /c "npm run dev"
-cd ..
-echo Dashboard: http://localhost:3000
-echo Backend:   http://localhost:8000
-exit /b 0
+
+echo [0/6] Probing CUDA / GPU...
+set "PY_CMD=.venv\Scripts\python.exe"
+if not exist "!PY_CMD!" set "PY_CMD=python"
+
+REM Unified probe via cuda_detect.py (PyTorch, ONNX Runtime, OpenCV)
+!PY_CMD! ml/cuda_detect.py 2>nul || echo "  [WARN] cuda_detect.py not available"
+
+REM Determine engine ONNX provider from probe
+set "ORT_PROVIDER=cpu"
+for /f "tokens=* delims=" %%a in ('!PY_CMD! -c "from ml.cuda_detect import CudaEnv; e=CudaEnv.probe(); print(e.recommended_onnx_provider)" 2>nul') do set "ORT_PROVIDER=%%a"
+echo   Engine ONNX provider: !ORT_PROVIDER!
+
+REM Determine training device from probe
+set "TRAIN_DEVICE_DEFAULT=cpu"
+for /f "tokens=* delims=" %%a in ('!PY_CMD! -c "from ml.cuda_detect import CudaEnv; e=CudaEnv.probe(); print(e.recommended_device)" 2>nul') do set "TRAIN_DEVICE_DEFAULT=%%a"
+if "%CUDA_AVAILABLE%"=="1" set "TRAIN_DEVICE_DEFAULT=cuda"
+echo   Training device: %TRAIN_DEVICE_DEFAULT%
+echo.
+
+REM ---------------------- build ---------------------------------------
+if "%DASHBOARD_ONLY%"=="1" goto dashboard_only
 
 :build
 if "%REBUILD%"=="0" if exist "engine\build\engine.exe" (
-    echo [build] engine.exe found - skipping configure/build
-    echo         ^(pass --rebuild to force a clean rebuild^)
+    echo [1/5] engine.exe found — skipping build (pass --rebuild to force)
     goto train
 )
 
-echo [1/3] Configuring CMake...
+echo [1/5] Configuring CMake...
 if not exist "engine\build" mkdir "engine\build"
 cd engine\build
-cmake .. -G Ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DENABLE_TESTING=OFF -DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe
+cmake .. -G Ninja -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DENABLE_TESTING=OFF -DENABLE_ONNX_CUDA=AUTO -DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe -DCMAKE_CXX_COMPILER=C:/msys64/mingw64/bin/g++.exe
 if errorlevel 1 (
     echo ERROR: CMake configuration failed!
     cd ..\..
@@ -136,7 +161,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/3] Building engine...
+echo [2/5] Building engine...
 cmake --build .
 if errorlevel 1 (
     echo ERROR: Build failed!
@@ -144,18 +169,28 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM copy runtime DLLs next to engine.exe
+if exist engine\build\engine.exe (
+    if exist "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libcrypto-3-x64.dll" engine\build\ >nul
+    if exist "C:\msys64\mingw64\bin\libssl-3-x64.dll" copy /Y "C:\msys64\mingw64\bin\libssl-3-x64.dll" engine\build\ >nul
+    if exist "C:\msys64\mingw64\bin\zlib1.dll" copy /Y "C:\msys64\mingw64\bin\zlib1.dll" engine\build\ >nul
+    for %%d in ("engine\build\onnxruntime.dll") do if exist "%%d" copy /Y "%%d" engine\build\ >nul
+)
+
 cd ..\..
 
+REM ---------------------- train ---------------------------------------
 :train
-if "%TRAIN%"=="0" goto run_engine
+if "%TRAIN%"=="0" goto run_system
+REM Use auto-detected device when --train-device not explicitly set
+if "%TRAIN_DEVICE%"=="auto" set "TRAIN_DEVICE=%TRAIN_DEVICE_DEFAULT%"
 echo.
-echo ============================================
-echo   Training MARL policy
-echo ============================================
+echo [3/5] Training MARL policy
+echo ====================================================================
 echo   City: %TRAIN_CITY%   Episodes: %TRAIN_EPISODES%   Device: %TRAIN_DEVICE%
 echo.
 cd ml
-%PYTHON% -u -m train.train --city %TRAIN_CITY% --episodes %TRAIN_EPISODES% --device %TRAIN_DEVICE% --batch-size %TRAIN_BATCH% --checkpoint-interval 50 --log-interval 10
+!PY_CMD! -u -m train.train --city %TRAIN_CITY% --episodes %TRAIN_EPISODES% --device %TRAIN_DEVICE% --batch-size %TRAIN_BATCH% --checkpoint-interval 50 --log-interval 10
 if errorlevel 1 (
     echo ERROR: Training failed!
     cd ..
@@ -169,7 +204,7 @@ if not defined LAST_CKPT (
     exit /b 1
 )
 echo Exporting ONNX policy from %LAST_CKPT% ...
-%PYTHON% -u -m export.export_onnx --checkpoint "%LAST_CKPT%" --output policy.onnx
+!PY_CMD! -u -m export.export_onnx --checkpoint "%LAST_CKPT%" --output policy.onnx
 if errorlevel 1 (
     echo ERROR: ONNX export failed!
     cd ..
@@ -179,83 +214,85 @@ cd ..
 set "POLICY=ml\policy.onnx"
 echo Policy ready: ml\policy.onnx
 
-:run_engine
+REM ---------------------- run system ----------------------------------
+:run_system
 echo.
-if "%NO_WS%"=="1" (
-    echo [3/4] Skipping dashboard, --no-ws was given...
-) else (
-    echo [3/4] Starting dashboard...
-    cd dashboard
-    if not exist "node_modules" (
-        echo Installing dashboard dependencies...
-        call npm install
+echo [4/5] Starting services...
+
+REM 1. C++ Simulation Engine (WS :9001)
+echo   [1/4] C++ Simulation Engine (WS :9001)...
+if exist engine\build\engine.exe (
+    set "ENGINE_ARGS=--city %CITY% --port 9001 --onnx-provider !ORT_PROVIDER!"
+    if exist certs\server.crt if exist certs\server.key set "ENGINE_ARGS=!ENGINE_ARGS! --ssl-cert certs\server.crt --ssl-key certs\server.key"
+    if "%NO_WS%"=="1" set "ENGINE_ARGS=!ENGINE_ARGS! --no-ws"
+    if "%FAST%"=="1" set "ENGINE_ARGS=!ENGINE_ARGS! --fast"
+    if not "%OD_PATH%"=="" (
+        set "ENGINE_ARGS=!ENGINE_ARGS! --od %OD_PATH%"
+        if not "%DEMAND_SCALE%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --demand-scale %DEMAND_SCALE%"
+        set "ENGINE_ARGS=!ENGINE_ARGS! --start-hour %START_HOUR% --speed-factor %SPEED_FACTOR% --route-spread %ROUTE_SPREAD%"
     )
-    start "" cmd /c "npm run dev"
-    ping -n 4 127.0.0.1 >nul
-    cd ..
-)
-
-where python >nul 2>nul
-if !errorlevel! equ 0 (
-    echo Starting unified backend gateway ^(port 8000^)...
-    start "" cmd /c "python -m gateway.server"
-    ping -n 3 127.0.0.1 >nul
-)
-
-echo.
-echo [4/4] Running simulation...
-echo City: %CITY%
-if "%OD_PATH%"=="" (
-    echo Mode: uniform   Agents: %AGENTS%
+    if not "%JOURNEY_PATH%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --journey %JOURNEY_PATH%"
+    if not "%CHAOS%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --chaos %CHAOS%"
+    if not "%POLICY%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --policy %POLICY%"
+    start /b "" cmd /c "engine\build\engine.exe !ENGINE_ARGS! > logs\engine.log 2>&1"
+    echo     backgrounded -> logs\engine.log
 ) else (
-    echo Mode: OD-driven   Matrix: %OD_PATH%
-    echo Demand scale: %DEMAND_SCALE%   Start hour: %START_HOUR%
-    echo Speed factor: %SPEED_FACTOR%   Route spread: %ROUTE_SPREAD%
-)
-echo Duration: %DURATION% min
-echo.
-if "%NO_WS%"=="1" (
-    rem No dashboard means no way to pick a city, so the engine must run headless.
-    set "FAST=1"
-) else (
-    echo Dashboard:       http://localhost:3000
-    echo Backend Gateway: http://localhost:8000 ^(WebSocket: ws://localhost:8000/ws^)
-)
-echo.
-if "%FAST%"=="1" (
-    echo Mode: headless -- the engine exits when the simulation finishes.
-) else (
-echo  NOTE: The engine idles until you pick a city on the dashboard. Selecting
-echo  a city starts that simulation ^(agents respawn so traffic stays live^),
-echo  and you can switch cities anytime. --duration only applies in --fast mode.
-echo  Press Ctrl+C to stop the engine.
-)
-echo.
-
-set "ENGINE_ARGS=--city %CITY% --duration %DURATION%"
-if "%OD_PATH%"=="" (
-    set "ENGINE_ARGS=!ENGINE_ARGS! --agents %AGENTS%"
-) else (
-    set "ENGINE_ARGS=!ENGINE_ARGS! --od %OD_PATH%"
-    if not "%DEMAND_SCALE%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --demand-scale %DEMAND_SCALE%"
-    set "ENGINE_ARGS=!ENGINE_ARGS! --start-hour %START_HOUR% --speed-factor %SPEED_FACTOR% --route-spread %ROUTE_SPREAD%"
-)
-if not "%JOURNEY_PATH%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --journey %JOURNEY_PATH%"
-if not "%CHAOS%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --chaos %CHAOS%"
-if not "%POLICY%"=="" set "ENGINE_ARGS=!ENGINE_ARGS! --policy %POLICY%"
-if "%FAST%"=="1" set "ENGINE_ARGS=!ENGINE_ARGS! --fast"
-if "%NO_WS%"=="1" set "ENGINE_ARGS=!ENGINE_ARGS! --no-ws"
-
-echo Engine: engine\build\engine.exe %ENGINE_ARGS%
-echo.
-engine\build\engine.exe %ENGINE_ARGS%
-if errorlevel 1 (
-    echo ERROR: Simulation failed!
-    exit /b 1
+    echo     [WARN] engine\build\engine.exe not found; build it first
 )
 
+REM 2. Unified API Gateway (:8000)
+echo   [2/4] Unified API Gateway (:8000)...
+start /b "" cmd /c "!PY_CMD! -m gateway.server > logs\gateway.log 2>&1"
+echo     backgrounded -> logs\gateway.log
+
+REM 3. CV Virtual Camera (:9003)
+echo   [3/4] CV Virtual Camera (:9003)...
+start /b "" cmd /c "!PY_CMD! ml\cv\virtual_camera_service.py > logs\camera.log 2>&1"
+echo     backgrounded -> logs\camera.log
+
+REM 4. NLP Chat & Incident Sidecar (:9004)
+echo   [4/4] NLP Chat & Incident Sidecar (:9004)...
+start /b "" cmd /c "!PY_CMD! ml\nlp\chat_service.py > logs\nlp.log 2>&1"
+echo     backgrounded -> logs\nlp.log
+
+REM 5. Cross-Subject Event Bus (:9005)
+echo   [5/5] Cross-Subject Event Bus (:9005)...
+start /b "" cmd /c "!PY_CMD! pipeline\src\event_bus.py > logs\eventbus.log 2>&1"
+echo     backgrounded -> logs\eventbus.log
+
+REM 6. Algorithm Explorer API Sidecar (:9006)
+echo   [6/6] Algorithm Explorer API (:9006)...
+start /b "" cmd /c "!PY_CMD! ml\sidecars\algo_explorer_service.py > logs\algo.log 2>&1"
+echo     backgrounded -> logs\algo.log
+
 echo.
-echo ============================================
-echo   Simulation complete!
-echo ============================================
+echo ====================================================================
+echo   All NexusSim services started (single window; logs in logs\).
+echo ====================================================================
+echo   Default city:      %CITY%
+echo   Engine WS:         ws://localhost:9001
+echo   Gateway:           https://localhost:8000
+echo   Dashboard:         http://localhost:3000  (run: cd dashboard && npm run dev)
+echo   API docs:          https://localhost:8000/docs
+echo   Logs:              logs\
+echo   ONNX provider:     !ORT_PROVIDER!
+echo ====================================================================
+echo   Services run backgrounded; this window stays open to keep them alive.
+echo   Close this window or press Ctrl+C to stop all services.
+echo ====================================================================
+goto end
+
+REM ---------------------- dashboard only ------------------------------
+:dashboard_only
+cd dashboard
+if not exist "node_modules" (
+    echo Installing dashboard dependencies...
+    call npm install
+)
+start "" cmd /c "npm run dev"
+cd ..
+goto end
+
+REM ---------------------- end -----------------------------------------
+:end
 endlocal

@@ -451,7 +451,7 @@ The plan is organized into 10 capability modules, 5 implementation phases, and a
 - **Phase 4 (partial):** Real-time ingestion framework (`gateway/platform_services.py`) with GTFS-RT / CV2X / MQTT / weather adapters → event bus (`POST /api/ingest/{feed}`, `GET /api/ingest/feeds`); algorithm marketplace registry (`GET/POST /api/algo/registry`, `POST /api/algo/registry/{id}/validate`).
 - **Phase 5 (partial):** Emissions & carbon accounting (`POST /api/emissions`, `POST /api/emissions/aggregate`, public `POST /api/emissions/estimate`) with ICE/EV per-agent CO₂/NOx/PM; dashboard `EmissionsPanel` ("Carbon" tab).
 - **Postman:** I28–I31 (city mgmt), J32–J40 (auth/sim/scenario), K41–K50 (platform services).
-- **`run_full_system.bat`:** Dynamic city arg + gateway startup.
+- **`run.bat`:** Dynamic city arg + gateway startup.
 - **Verification:** `api_check.py` **46/46** passing; gateway pytest 38/38; pipeline 39/39; dashboard 8/8 + production build; engine CTest 56/56.
 
 ### Remaining

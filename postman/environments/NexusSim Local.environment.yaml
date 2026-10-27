@@ -1,0 +1,32 @@
+name: NexusSim Local
+values:
+  - key: gateway
+    value: 'https://localhost:8000'
+    enabled: true
+  - key: camera
+    value: 'https://localhost:9003'
+    enabled: true
+  - key: nlp
+    value: 'https://localhost:9004'
+    enabled: true
+  - key: event_bus
+    value: 'https://localhost:9005'
+    enabled: true
+  - key: algo
+    value: 'https://localhost:9006'
+    enabled: true
+  - key: dashboard
+    value: 'https://localhost:3000'
+    enabled: true
+  - key: auth_token
+    value: ''
+    enabled: true
+  - key: registered_algo_id
+    value: ''
+    enabled: true
+  - key: test_sim_id
+    value: ''
+    enabled: true
+  - key: postman_test_osm_file
+    value: ''
+    enabled: true

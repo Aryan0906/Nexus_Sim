@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "NexusSim API",
-    "description": "Full-stack API collection for NexusSim. Import into Postman (File > Import) and run top to bottom. Covers A-H (original), I (city management), J (auth & simulation), K (platform services). All services must be running (run_full_system.bat). Gateway serves HTTPS with a local self-signed cert.",
+    "description": "Full-stack API collection for NexusSim. Import into Postman (File > Import) and run top to bottom. Covers A-H (original), I (city management), J (auth & simulation), K (platform services). All services must be running (run.bat). Gateway serves HTTPS with a local self-signed cert.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [

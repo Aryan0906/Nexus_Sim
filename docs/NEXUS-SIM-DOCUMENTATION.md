@@ -360,7 +360,7 @@ over WebSocket, so `make demo` alone shows no simulation. To see the UI, run
 run.bat
 ```
 
-`run.bat` adds `C:\msys64\mingw64\bin` to `PATH`, builds the engine, and starts
+`run.bat` adds `C:\msys64\mingw64\bin` to `PATH`, builds the engine, optionally trains the MARL policy, exports it to ONNX, and starts the engine plus all sidecars.
 the engine plus the dashboard dev server.
 
 > Contradiction to resolve: the root `README.md` states that `make demo`
@@ -708,7 +708,7 @@ python -m algo.continuous_control   # DDPG, TD3, SAC on Pendulum-v1
 
 Each suite accepts `--device` only. There is no `--algos`, no `--city`, no
 `ml/algo/benchmark.py`, no `ml/algo/configs.yaml`, and no `ml/eval/report.py`.
-The `US-D09` command in `docs/USER_STORIES.md` does not exist.
+The `US-D09` benchmark command (`--algos all`) referenced in the user stories does not exist; see `docs/RL_DOCUMENTATION.md` §8 for the documented gap.
 
 ### 4.9 Running the Sidecars
 
@@ -1213,21 +1213,20 @@ Summary:
 
 | Document | Role | Status |
 |---|---|---|
-| `README.md` (root) | User-facing readme | Current, except the `make demo` claim |
-| `docs/README.md` | Docs index | Current |
+| `README.md` (root) | User-facing readme | Current (updated 2026-10) |
+| `docs/README.md` | Docs index | Current (updated 2026-10) |
 | `docs/NEXUS-SIM-DOCUMENTATION.md` | This master document | Current |
 | `docs/PRD.md` | Product goals, users, non-goals, metrics, risks | Source of record |
 | `docs/TRD.md` | Technical requirements catalogue | Source of record |
+| `docs/TECH_STACK.md` | Technology stack | New — fills previously missing spec |
 | `docs/TEAM_IMPLEMENTATION_PLAN.md` | Phases 0–36, milestones, checkpoints, risk register | Source of record; status line is stale |
 | `docs/BACKLOG.md` | Per-phase status and open items | Current to 2026-10-21 |
-| `docs/USER_STORIES.md` | 21 acceptance stories | Current, except the US-D09 command |
 | `docs/results.md` | Benchmark and validation tables | Current, with the unverified tables marked |
 | `docs/AI_STRESS_REPORT.md` | Phase 8.8 latency and frame-rate gate | Current |
 | `docs/e2e_checklist.md` | Manual end-to-end checks | Current |
 | `docs/graph_schema.md`, `docs/od_matrix_schema.md` | Data format references | Current |
-| `docs/CV_DOCUMENTATION.md` | CV subject record | Contains false DONE marks |
-| `docs/NLP_DOCUMENTATION.md` | NLP subject record | Contains false DONE marks |
-| `docs/RL_DOCUMENTATION.md` | RL subject record | Stale pins and commands |
-| `docs/SOFT_COMPUTING_DOCUMENTATION.md` | SC subject record | Cites a flag that does not exist |
-| `docs/SESSION_PROGRESS_2026-09-17.md` | Phase 9 handoff | Superseded; delete when Phase 9 closes |
-| `docs/NexusSim_Explained_Engineered_v2.pdf` | Illustrated explainer | Current; source file is absent, so it cannot be regenerated |
+| `docs/futureplanning.md` | Production roadmap | Planning-stage, not committed scope |
+| `docs/RL_DOCUMENTATION.md` | RL subject record | New — accurate observation/reward/algorithm/training record |
+| `docs/CV_DOCUMENTATION.md` | CV subject record | New — accurate congestion/virtual-camera record |
+| `docs/NLP_DOCUMENTATION.md` | NLP subject record | New — accurate chat/incident record |
+| `docs/SOFT_COMPUTING_DOCUMENTATION.md` | SC subject record | New — accurate GA/fuzzy/optimizer record |

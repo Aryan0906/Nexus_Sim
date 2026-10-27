@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -23,6 +23,10 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 _DIRECTIONS = ["N", "S", "E", "W"]
+
+# Minimum road degree for a node to count as a signalised intersection when a
+# graph carries no explicit ``is_signal`` flags (see ``_signal_ids``).
+_MIN_SIGNAL_DEGREE = 3
 
 # Bearing ranges (degrees, clockwise from north)
 #   N: 315–45  |  E: 45–135  |  S: 135–225  |  W: 225–315
@@ -119,6 +123,32 @@ def _bfs_next_signal(
 # ---------------------------------------------------------------------------
 
 
+def _signal_ids(nodes: list, edges: list, path: str) -> set:
+    """Return the signalised node ids of a graph.
+
+    Prefers the explicit ``is_signal`` flag. The pipeline writes graphs for the
+    larger cities without usable flags, so fall back to topology: a node with
+    at least ``_MIN_SIGNAL_DEGREE`` incident road legs is an intersection that
+    can be signalised.
+    """
+    flagged = {n["id"] for n in nodes if n.get("is_signal")}
+    if flagged:
+        return flagged
+
+    degree = Counter()
+    for e in edges:
+        degree[e["u"]] += 1
+        degree[e["v"]] += 1
+    derived = {n["id"] for n in nodes
+               if degree.get(n["id"], 0) >= _MIN_SIGNAL_DEGREE}
+    if not derived:
+        raise ValueError(f"No signalised nodes in {path}")
+    print("[graph_loader] %s has no is_signal flags; derived %d signalised "
+          "intersections from topology (degree >= %d)"
+          % (path, len(derived), _MIN_SIGNAL_DEGREE))
+    return derived
+
+
 def load_graph_json(path: str | Any, default_base_rate: float = _DEFAULT_BASE_RATE) -> dict:
     """Load ``data/<city>/graph.json`` and return the ML graph descriptor.
 
@@ -137,10 +167,16 @@ def load_graph_json(path: str | Any, default_base_rate: float = _DEFAULT_BASE_RA
     for e in edges:
         adj[e["u"]].append((e["v"], e["length_m"]))
 
+    # --- incident (undirected) neighbours, built once ----------------------
+    # Scanning every edge per signal costs O(signals * edges) and dominates
+    # the load for graphs with thousands of intersections.
+    incident: dict[int, set[int]] = defaultdict(set)
+    for e in edges:
+        incident[e["u"]].add(e["v"])
+        incident[e["v"]].add(e["u"])
+
     # --- signalised node set -----------------------------------------------
-    signal_ids = {n["id"] for n in data["nodes"] if n.get("is_signal")}
-    if not signal_ids:
-        raise ValueError(f"No signalised nodes in {path}")
+    signal_ids = _signal_ids(data["nodes"], edges, str(path))
 
     # --- per-signal approach / downstream resolution -----------------------
     intersections: list[int] = []
@@ -152,12 +188,7 @@ def load_graph_json(path: str | Any, default_base_rate: float = _DEFAULT_BASE_RA
         s_node = nodes[sid]
 
         # All nodes adjacent to this signal (in or out)
-        connected: set[int] = set()
-        for e in edges:
-            if e["u"] == sid:
-                connected.add(e["v"])
-            elif e["v"] == sid:
-                connected.add(e["u"])
+        connected: set[int] = incident.get(sid, set())
 
         # Group connected nodes by bearing FROM the signal
         dir_nodes: dict[str, list[int]] = defaultdict(list)

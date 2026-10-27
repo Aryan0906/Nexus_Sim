@@ -23,15 +23,16 @@ here = os.path.dirname(os.path.abspath(__file__))
 if here not in sys.path:
     sys.path.insert(0, here)
 
-from base_trainer import BaseTrainer, SingleAgentNexusSimEnv, run_benchmark
+from base_trainer import (BaseTrainer, SingleAgentNexusSimEnv, parse_device_arg,
+                          report_device, run_benchmark)
 
 
 # -------------------------------------------------------------
 # 1. Tabular Q-Learning
 # -------------------------------------------------------------
 class QLearningTrainer(BaseTrainer):
-    def __init__(self, city="toy", alpha=0.1, gamma=0.95, epsilon=0.1):
-        super().__init__("Q-Learning", city=city)
+    def __init__(self, city="toy", alpha=0.1, gamma=0.95, epsilon=0.1, device="auto"):
+        super().__init__("Q-Learning", city=city, device=device)
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
@@ -82,8 +83,8 @@ class QLearningTrainer(BaseTrainer):
 # 2. Tabular SARSA
 # -------------------------------------------------------------
 class SARSATrainer(BaseTrainer):
-    def __init__(self, city="toy", alpha=0.1, gamma=0.95, epsilon=0.1):
-        super().__init__("SARSA", city=city)
+    def __init__(self, city="toy", alpha=0.1, gamma=0.95, epsilon=0.1, device="auto"):
+        super().__init__("SARSA", city=city, device=device)
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
@@ -176,8 +177,9 @@ class DuelingQNetwork(nn.Module):
 # 3, 4, 5. Deep Value-Based Trainer (DQN, DDQN, Dueling DQN)
 # -------------------------------------------------------------
 class DeepValueTrainer(BaseTrainer):
-    def __init__(self, algo_name="DQN", city="toy", is_double=False, is_dueling=False):
-        super().__init__(algo_name, city=city)
+    def __init__(self, algo_name="DQN", city="toy", is_double=False, is_dueling=False,
+                 device="auto"):
+        super().__init__(algo_name, city=city, device=device)
         self.is_double = is_double
         self.is_dueling = is_dueling
 
@@ -185,8 +187,8 @@ class DeepValueTrainer(BaseTrainer):
         act_dim = self.env.action_space.n
 
         NetClass = DuelingQNetwork if is_dueling else QNetwork
-        self.policy_net = NetClass(obs_dim, act_dim)
-        self.target_net = NetClass(obs_dim, act_dim)
+        self.policy_net = NetClass(obs_dim, act_dim).to(self.device)
+        self.target_net = NetClass(obs_dim, act_dim).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=1e-3)
@@ -201,7 +203,7 @@ class DeepValueTrainer(BaseTrainer):
                     action = self.env.action_space.sample()
                 else:
                     with torch.no_grad():
-                        t_obs = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+                        t_obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
                         action = int(self.policy_net(t_obs).argmax(dim=-1).item())
 
                 next_obs, reward, done, _, _ = self.env.step(action)
@@ -212,11 +214,11 @@ class DeepValueTrainer(BaseTrainer):
                     batch = random.sample(self.memory, 32)
                     b_o, b_a, b_r, b_no, b_d = zip(*batch)
 
-                    b_o = torch.tensor(np.array(b_o), dtype=torch.float32)
-                    b_a = torch.tensor(b_a, dtype=torch.int64).unsqueeze(1)
-                    b_r = torch.tensor(b_r, dtype=torch.float32).unsqueeze(1)
-                    b_no = torch.tensor(np.array(b_no), dtype=torch.float32)
-                    b_d = torch.tensor(b_d, dtype=torch.float32).unsqueeze(1)
+                    b_o = torch.tensor(np.array(b_o), dtype=torch.float32, device=self.device)
+                    b_a = torch.tensor(b_a, dtype=torch.int64, device=self.device).unsqueeze(1)
+                    b_r = torch.tensor(b_r, dtype=torch.float32, device=self.device).unsqueeze(1)
+                    b_no = torch.tensor(np.array(b_no), dtype=torch.float32, device=self.device)
+                    b_d = torch.tensor(b_d, dtype=torch.float32, device=self.device).unsqueeze(1)
 
                     q_vals = self.policy_net(b_o).gather(1, b_a)
 
@@ -246,7 +248,7 @@ class DeepValueTrainer(BaseTrainer):
             ep_rew = 0.0
             while not done:
                 with torch.no_grad():
-                    t_obs = torch.tensor(obs, dtype=torch.float32).unsqueeze(0)
+                    t_obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
                     action = int(self.policy_net(t_obs).argmax(dim=-1).item())
                 obs, reward, done, _, _ = self.env.step(action)
                 ep_rew += reward
@@ -259,13 +261,18 @@ class DeepValueTrainer(BaseTrainer):
 
 
 def main():
+    args = parse_device_arg("Value-based RL inventory benchmark")
     trainers = [
-        QLearningTrainer(city="toy"),
-        SARSATrainer(city="toy"),
-        DeepValueTrainer(algo_name="DQN", is_double=False, is_dueling=False),
-        DeepValueTrainer(algo_name="DDQN", is_double=True, is_dueling=False),
-        DeepValueTrainer(algo_name="Dueling DQN", is_double=True, is_dueling=True),
+        QLearningTrainer(city="toy", device=args.device),
+        SARSATrainer(city="toy", device=args.device),
+        DeepValueTrainer(algo_name="DQN", is_double=False, is_dueling=False,
+                         device=args.device),
+        DeepValueTrainer(algo_name="DDQN", is_double=True, is_dueling=False,
+                         device=args.device),
+        DeepValueTrainer(algo_name="Dueling DQN", is_double=True, is_dueling=True,
+                         device=args.device),
     ]
+    report_device(trainers)
 
     res = run_benchmark(trainers, episodes=20)
     print("\nPhase 20 Value-Based RL Inventory Benchmark Results:")

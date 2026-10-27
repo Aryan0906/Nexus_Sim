@@ -37,6 +37,7 @@ if ML_DIR not in sys.path:
 
 from env import NexusSimEnv, build_toy_graph
 from env.graph_loader import load_graph_json
+from train.device import describe_device, gpu_status, resolve_device
 from train.ppo import compute_gae_batched, ppo_update
 from train.rollout import collect_episode, evaluate_fixed_baseline
 from train.train import build_models, latest_checkpoint
@@ -110,10 +111,19 @@ def main() -> None:
     parser.add_argument("--clip-eps", type=float, default=0.2)
     parser.add_argument("--entropy-coef", type=float, default=0.003)
     parser.add_argument("--episode-steps", type=int, default=100)
+    parser.add_argument(
+        "--batch-size", type=int, default=0,
+        help="PPO minibatch size. 0 (default) scales it with the number of "
+             "samples in the update, which keeps the small graphs at the "
+             "recorded 1024 and uses a large minibatch on city graphs where "
+             "1024-sample minibatches leave the GPU idle.",
+    )
     parser.add_argument("--decision-interval", type=float, default=5.0)
     parser.add_argument("--checkpoint-interval", type=int, default=50)
     parser.add_argument("--log-interval", type=int, default=10)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=os.environ.get("NEXUS_DEVICE", "auto"),
+                        help="compute device: auto (CUDA when available, else "
+                             "CPU), cpu, cuda or cuda:N")
     parser.add_argument("--experiment", default=None)
     parser.add_argument("--reward-scale", type=float, default=0.0)
     parser.add_argument(
@@ -125,7 +135,8 @@ def main() -> None:
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    device = torch.device(args.device)
+    device = resolve_device(args.device)
+    print("Device:", describe_device(device))
 
     src_path = _resolve_source(args.source)
     print(f"Source checkpoint: {src_path}")
@@ -196,6 +207,7 @@ def main() -> None:
         params = {
             "source": args.source, "target": args.target, "source_checkpoint": src_path,
             "lr": args.lr, "episodes": args.episodes,
+            "resolved_device": str(device),
         }
         if resume_path:
             params["resumed_from"] = resume_path
@@ -224,7 +236,8 @@ def main() -> None:
                     advantages.reshape(-1),
                     returns.reshape(-1),
                     clip_eps=args.clip_eps, entropy_coef=args.entropy_coef,
-                    n_epochs=4, batch_size=1024,
+                    n_epochs=4,
+                    batch_size=args.batch_size or None,
                 )
 
                 mlflow.log_metrics({
@@ -238,7 +251,8 @@ def main() -> None:
                     pbar.set_postfix(reward=f"{summary['episode_reward']:.1f}",
                                      pressure=f"{summary['mean_pressure']:.3f}",
                                      gini=f"{summary['gini']:.3f}",
-                                     complete=f"{100.0 * (episode + 1) / total:.1f}%")
+                                     complete=f"{100.0 * (episode + 1) / total:.1f}%",
+                                     **({"gpu": gpu_status(device)} if device.type == "cuda" else {}))
 
                 if episode % args.checkpoint_interval == 0 or episode == total - 1:
                     path = os.path.join(checkpoint_dir, "%d.pt" % episode)
@@ -253,6 +267,10 @@ def main() -> None:
                     pbar.write(f"checkpoint: {path}")
 
                 pbar.update(1)
+        if device.type == "cuda":
+            peak_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+            print("GPU peak memory: %.1f MB" % peak_mb)
+            mlflow.log_metrics({"gpu_peak_mem_mb": peak_mb}, step=max(0, total - 1))
         print(f"Transfer complete: {args.source} -> {args.target} "
               f"({total} episodes, reward={summary['episode_reward']:.1f})")
 

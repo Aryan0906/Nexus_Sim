@@ -24,6 +24,7 @@ if ML_DIR not in sys.path:
 from env import NexusSimEnv, build_toy_graph
 from env.graph_loader import load_graph_json
 from models import PolicyNetwork, ValueNetwork
+from train.device import describe_device, resolve_device
 from train.rollout import evaluate_fixed_baseline
 
 
@@ -39,7 +40,7 @@ def _load_env(city: str, episode_steps: int = 100) -> NexusSimEnv:
 
 
 def _eval_marl(env: NexusSimEnv, checkpoint_path: str, n_episodes: int = 20,
-               device: str = "cpu") -> dict:
+               device: torch.device | str = "cpu") -> dict:
     obs_dim = env.observation_space.shape[0]
     ckpt = torch.load(checkpoint_path, map_location=device)
     # Infer hidden size from checkpoint to support non-default architectures.
@@ -74,8 +75,12 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=20)
     parser.add_argument("--checkpoint", default=None,
                         help="Path to MARL checkpoint (.pt); omit for baseline-only")
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default=os.environ.get("NEXUS_DEVICE", "auto"),
+                        help="compute device: auto (CUDA when available, else "
+                             "CPU), cpu, cuda or cuda:N")
     args = parser.parse_args()
+    device = resolve_device(args.device)
+    print("Device:", describe_device(device))
 
     rows = []
     for city in args.cities:
@@ -90,7 +95,7 @@ def main() -> None:
         row = {"city": city, "intersections": env.num_agents, "webster": baseline}
 
         if args.checkpoint and os.path.isfile(args.checkpoint):
-            marl = _eval_marl(env, args.checkpoint, args.episodes, args.device)
+            marl = _eval_marl(env, args.checkpoint, args.episodes, device)
             print(f"  MARL:    reward={marl['episode_reward']:.1f}  "
                   f"pressure={marl['mean_pressure']:.3f}  gini={marl['gini']:.3f}")
             denom = abs(baseline["episode_reward"])

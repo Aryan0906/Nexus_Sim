@@ -98,7 +98,10 @@ def collect_episode(env, policy, value_net, device) -> dict:
             actions, log_probs = policy.sample_action(obs_t)
             values = value_net(obs_t).squeeze(-1)
 
-        action_map = {i: int(actions[idx].item()) for idx, i in enumerate(agents)}
+        # Move the sampled actions to the host once. One .item() per agent
+        # would force one GPU synchronisation per agent per decision step.
+        action_values = actions.detach().cpu().tolist()
+        action_map = {i: int(action_values[idx]) for idx, i in enumerate(agents)}
         next_obs, rewards, terminated, truncated, info = env.step(action_map)
 
         act_t = torch.as_tensor([action_map[i] for i in agents],

@@ -29,6 +29,7 @@ if ML_DIR not in sys.path:
 from env import NexusSimEnv, build_toy_graph
 from env.graph_loader import load_graph_json
 from models import PolicyNetwork, ValueNetwork
+from train.device import describe_device, gpu_status, resolve_device
 from train.ppo import compute_gae_batched, ppo_update
 from train.rollout import collect_episode, evaluate_fixed_baseline
 
@@ -51,6 +52,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hidden", type=int, default=64)
     parser.add_argument("--decision-interval", type=float, default=5.0)
     parser.add_argument("--episode-steps", type=int, default=100)
+    parser.add_argument(
+        "--batch-size", type=int, default=0,
+        help="PPO minibatch size. 0 (default) scales it with the number of "
+             "samples in the update, which keeps the small graphs at the "
+             "recorded 1024 and uses a large minibatch on city graphs where "
+             "1024-sample minibatches leave the GPU idle.",
+    )
     parser.add_argument("--checkpoint-interval", type=int, default=500)
     parser.add_argument("--log-interval", type=int, default=10)
     parser.add_argument(
@@ -64,7 +72,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", default=None, help="path or 'latest'")
     parser.add_argument("--baseline-episodes", type=int, default=10)
     parser.add_argument("--experiment", default=None)
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument(
+        "--device", default=os.environ.get("NEXUS_DEVICE", "auto"),
+        help="compute device: auto (CUDA when available, else CPU), cpu, "
+             "cuda or cuda:N",
+    )
     parser.add_argument(
         "--reward-scale", type=float, default=0.0,
         help="divisor for per-step rewards before GAE/PPO so returns are O(1); "
@@ -100,7 +112,8 @@ def main() -> None:
     args = parse_args()
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    device = torch.device(args.device)
+    device = resolve_device(args.device)
+    print("Device:", describe_device(device))
 
     graph = build_toy_graph()
     if args.city != "toy":
@@ -144,6 +157,7 @@ def main() -> None:
     with mlflow.start_run():
         params = dict(vars(args))
         params["reward_scale"] = reward_scale
+        params["resolved_device"] = str(device)
         mlflow.log_params(params)
         mlflow.log_metrics({("baseline_" + k): v for k, v in baseline.items()})
 
@@ -197,7 +211,8 @@ def main() -> None:
                 torch.cat(batch["adv"], dim=1).reshape(-1),
                 torch.cat(batch["ret"], dim=1).reshape(-1),
                 clip_eps=args.clip_eps, entropy_coef=args.entropy_coef,
-                n_epochs=4, batch_size=1024,
+                n_epochs=4,
+                batch_size=args.batch_size or None,
             )
 
             summary = {k: sum(s[k] for s in summaries) / len(summaries)
@@ -217,7 +232,8 @@ def main() -> None:
                                  pressure=f"{summary['mean_pressure']:.3f}",
                                  equity=f"{summary['equity']:.1f}",
                                  gini=f"{summary['gini']:.3f}",
-                                 complete=f"{100.0 * (step + 1) / args.episodes:.1f}%")
+                                 complete=f"{100.0 * (step + 1) / args.episodes:.1f}%",
+                                 **({"gpu": gpu_status(device)} if device.type == "cuda" else {}))
                 next_log = max(next_log + args.log_interval, step + 1)
 
             if step >= next_ckpt or step == args.episodes - 1:
@@ -235,6 +251,11 @@ def main() -> None:
                 pbar.write("checkpoint saved: %s" % path)
                 next_ckpt = max(next_ckpt + args.checkpoint_interval, step + 1)
         pbar.close()
+        if device.type == "cuda":
+            peak_mb = torch.cuda.max_memory_allocated() / (1024 ** 2)
+            print("GPU peak memory: %.1f MB" % peak_mb)
+            mlflow.log_metrics({"gpu_peak_mem_mb": peak_mb},
+                               step=max(0, episode - 1))
         print(f"Training complete: mappo {args.city} "
               f"({args.episodes} episodes, reward={summary['episode_reward']:.1f})")
 

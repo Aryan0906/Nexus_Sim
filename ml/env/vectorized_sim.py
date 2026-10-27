@@ -146,7 +146,25 @@ class VectorizedTrafficSim:
         n_sub = int(round(self.decision_interval / self.dt))
         for _ in range(n_sub):
             self._substep()
-        return self._snapshot()
+        return self.snapshot_ml()
+
+    def snapshot_ml(self) -> dict:
+        """Snapshot for the vectorized ML path.
+
+        The full snapshot also builds queue, phase and time-in-phase dicts
+        for every intersection. The ML path never reads them, and on a city
+        graph building them costs more than the simulation itself.
+
+        ``zone_wait`` is returned as a float array in simulation-index order
+        rather than a dict keyed by intersection id.
+        """
+        zone_wait_arr = self.wait_acc.sum(axis=1) / self.decision_interval
+        self.wait_acc[:] = 0.0
+        return {
+            "zone_wait": zone_wait_arr,
+            "sim_time": self.sim_time,
+            "completed": self.completed,
+        }
 
     def _substep(self):
         green_all = np.zeros((self.N, 4), dtype=np.bool_)
@@ -176,7 +194,13 @@ class VectorizedTrafficSim:
 
         if ds_idx.size > 0:
             ds_approaches = np.broadcast_to(np.arange(4), (self.N, 4))[has_ds]
-            np.add.at(self.queues, (ds_idx, ds_approaches), arriving)
+            # np.add.at is an unbuffered scatter-add and dominates the
+            # substep on city graphs. bincount accumulates the same values in
+            # the same order and is an order of magnitude faster.
+            flat = ds_idx * 4 + ds_approaches
+            counts = np.bincount(flat, weights=arriving,
+                                 minlength=self.N * 4)
+            self.queues += counts.reshape(self.N, 4)
 
         self.wait_acc += self.queues * self.dt
         self.sim_time += self.dt
